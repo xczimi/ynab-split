@@ -1,6 +1,6 @@
 <template>
   <div id="app">
-    <Nav />
+    <Nav/>
     <div class="container">
 
       <!-- Display a loading message if loading -->
@@ -9,7 +9,7 @@
       <!-- Display an error if we got one -->
       <div v-if="error">
         <h1 class="display-4">Oops!</h1>
-        <p class="lead">{{error}}</p>
+        <p class="lead">{{ error }}</p>
         <button class="btn btn-primary" @click="resetToken">Try Again &gt;</button>
       </div>
 
@@ -21,11 +21,17 @@
           <h1 class="display-4">Congrats!</h1>
           <p class="lead">You have successfully initialized a new YNAB API Application!</p>
           <p>The next step is the OAuth configuration, you can
-            <a href="https://github.com/ynab/ynab-api-starter-kit#step-2-obtain-an-oauth-client-id-so-the-app-can-access-the-ynab-api">read
+            <a
+              href="https://github.com/ynab/ynab-api-starter-kit#step-2-obtain-an-oauth-client-id-so-the-app-can-access-the-ynab-api">read
               detailed instructions in the README.md</a>. Essentially:</p>
           <ul>
-            <li>Make sure to be logged into your YNAB account, go to your <a href="https://app.ynab.com/settings/developer" target="_blank" rel="noopener noreferrer">YNAB Developer Settings</a> and create a new OAuth Application.</li>
-            <li>Enter the URL of this project as a Redirect URI (in addition to the existing three options), then "Save Application."</li>
+            <li>Make sure to be logged into your YNAB account, go to your <a
+              href="https://app.ynab.com/settings/developer" target="_blank" rel="noopener noreferrer">YNAB Developer
+              Settings</a> and create a new OAuth Application.
+            </li>
+            <li>Enter the URL of this project as a Redirect URI (in addition to the existing three options), then "Save
+              Application."
+            </li>
             <li>Copy your Client ID and Redirect URI into the <em>src/config.json</em> file of your project.</li>
             <li>Then build your amazing app!</li>
           </ul>
@@ -38,19 +44,27 @@
             <button @click="authorizeWithYNAB" class="btn btn-primary">Authorize This App With YNAB &gt;</button>
           </div>
         </form>
-
-        <!-- Otherwise if we have a token, show the budget select -->
-        <Budgets v-else-if="!budgetId" :budgets="budgets" :selectBudget="selectBudget" />
-
-        <!-- If a budget has been selected, display transactions from that budget -->
+        <!-- Otherwise if we have a token, show the budget selects and transactions -->
         <div v-else>
-          <Transactions :transactions="transactions" />
-          <button class="btn btn-info" @click="budgetId = null">&lt; Select Another Budget</button>
+          <div class="container">
+            <Budgets :budgets="budgets" :budgetId="leftBudgetId" :selectBudget="selectLeftBudget"
+                     :transactions="leftTransactions"
+                     :total="transactionsTotal(leftTransactions)"
+                     :otherTotal="transactionsTotal(rightTransactions)"/>
+            <Budgets :budgets="budgets" :budgetId="rightBudgetId" :selectBudget="selectRightBudget"
+                     :transactions="rightTransactions"
+                     :total="transactionsTotal(rightTransactions)"
+                     :otherTotal="transactionsTotal(leftTransactions)"/>
+          </div>
+          <div class="container">
+            <Transactions :transactions="leftTransactions"/>
+          </div>
+          <div class="container">
+            <Transactions :transactions="rightTransactions"/>
+          </div>
         </div>
-
       </div>
-
-      <Footer />
+      <Footer/>
     </div>
   </div>
 </template>
@@ -58,6 +72,7 @@
 <script>
 // Hooray! Here comes YNAB!
 import * as ynab from 'ynab';
+import * as R from 'ramda';
 
 // Import our config for YNAB
 import config from './config.json';
@@ -67,10 +82,11 @@ import Nav from './components/Nav.vue';
 import Footer from './components/Footer.vue';
 import Budgets from './components/Budgets.vue';
 import Transactions from './components/Transactions.vue';
+import {TransactionFlagColor, utils} from "ynab";
 
 export default {
   // The data to feed our templates
-  data () {
+  data() {
     return {
       ynab: {
         clientId: config.clientId,
@@ -80,9 +96,12 @@ export default {
       },
       loading: false,
       error: null,
-      budgetId: null,
+      sinceDate: "2024-01-01",
+      leftBudgetId: null,
+      leftTransactions: [],
+      rightBudgetId: null,
+      rightTransactions: [],
       budgets: [],
-      transactions: [],
     }
   },
   // When this component is created, check whether we need to get a token,
@@ -91,14 +110,17 @@ export default {
     this.ynab.token = this.findYNABToken();
     if (this.ynab.token) {
       this.api = new ynab.api(this.ynab.token);
-      if (!this.budgetId) {
+      if (!this.leftBudgetId) {
         this.getBudgets();
       } else {
-        this.selectBudget(this.budgetId);
+        this.selectLeftBudget(this.leftBudgetId);
       }
     }
   },
   methods: {
+    convertMilliUnitsToCurrencyAmount: ynab.utils.convertMilliUnitsToCurrencyAmount,
+    transactionsTotal: R.pipe(R.map(R.prop("amount")), R.sum),
+    transactionsSummary: R.pipe(R.groupBy(R.prop('category_name')),R.map(R.project("amount"))),
     // This uses the YNAB API to get a list of budgets
     getBudgets() {
       this.loading = true;
@@ -112,13 +134,30 @@ export default {
       });
     },
     // This selects a budget and gets all the transactions in that budget
-    selectBudget(id) {
+    selectRightBudget(id) {
       this.loading = true;
       this.error = null;
-      this.budgetId = id;
-      this.transactions = [];
-      this.api.transactions.getTransactions(id).then((res) => {
-        this.transactions = res.data.transactions;
+      this.rightBudgetId = id;
+      this.rightTransactions = [];
+      this.api.transactions.getTransactions(id, this.sinceDate).then((res) => {
+        this.rightTransactions = R.filter(R.propEq(TransactionFlagColor.Orange, "flag_color"))(res.data.transactions);
+      }).catch((err) => {
+        this.error = err.error.detail;
+      }).finally(() => {
+        this.loading = false;
+      });
+      if(id) {
+      } else {
+        this.loading = false;
+      }
+    },
+    selectLeftBudget(id) {
+      this.loading = true;
+      this.error = null;
+      this.leftBudgetId = id;
+      this.leftTransactions = [];
+      this.api.transactions.getTransactions(id, this.sinceDate).then((res) => {
+        this.leftTransactions = R.filter(R.propEq(TransactionFlagColor.Orange, "flag_color"))(res.data.transactions);
       }).catch((err) => {
         this.error = err.error.detail;
       }).finally(() => {
@@ -136,10 +175,10 @@ export default {
     // First it looks in the location.hash and then sessionStorage
     findYNABToken() {
       let token = null;
-      const search = window.location.hash.substring(1).replace(/&/g, '","').replace(/=/g,'":"');
+      const search = window.location.hash.substring(1).replace(/&/g, '","').replace(/=/g, '":"');
       if (search && search !== '') {
         // Try to get access_token from the hash returned by OAuth
-        const params = JSON.parse('{"' + search + '"}', function(key, value) {
+        const params = JSON.parse('{"' + search + '"}', function (key, value) {
           return key === '' ? value : decodeURIComponent(value);
         });
         token = params.access_token;
@@ -164,6 +203,6 @@ export default {
     Footer,
     Budgets,
     Transactions
-  }
+  },
 }
 </script>

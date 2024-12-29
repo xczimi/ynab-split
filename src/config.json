@@ -1,4 +1,5 @@
 {
-  "clientId": "a56948bc5fe6e80c1a241151611a53350518c119ea413de4375694ebebbd68e0",
-  "redirectUri": "https://ynab.github.io/ynab-api-starter-kit/"
+  "clientId": "x7Ro0UjaogQY_7VVTofErRZ2jWZQzAsTfs2vY94Mrxg",
+  "redirectUriLocal": "http://localhost:8080",
+  "redirectUri":"https://xczimi.github.io/ynab-split/"
 }
