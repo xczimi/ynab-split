@@ -122,7 +122,9 @@ Now you have properly set up a local environment to work on your project.
 
 Once your environment is configured, `npm start` will run the development server (defaults to `localhost:8080`) and watches for changes. Any modification to the source code will be updated immediately.
 
-This is useful to make a number of changes and preview them before committing the changes to the repository..
+When running locally with `npm start`, the app automatically uses `http://localhost:8080` as the redirect URI. This means you don't need to change your YNAB Developer settings when testing locally - just make sure to add `http://localhost:8080` as one of your Redirect URIs in your YNAB Developer settings.
+
+This is useful to make a number of changes and preview them before committing the changes to the repository.
 
 ### Build with `npm run build`
 

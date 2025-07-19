@@ -22,34 +22,24 @@
         </span>
       </div>
       <div class="card-text">
-        <div class="alert" :class="{'alert-info': otherTotal > total, 'alert-success': otherTotal <= total}">
+        <div class="alert mb-4" :class="{'alert-info': otherTotal > total, 'alert-success': otherTotal <= total}">
           <div class="d-flex justify-content-between">
             <strong>{{ otherTotal > total ? "Owed" : "Owes" }}</strong>
             <span class="text-end">{{ formatCurrency(Math.abs((otherTotal - total) / 2)) }}</span>
           </div>
         </div>
 
-        <button class="btn btn-sm btn-outline-light mb-3" @click="selectBudget(null, $event)">
-          <i class="fas fa-exchange-alt me-1"></i> Change Budget
-        </button>
+        <div class="d-flex justify-content-between align-items-center">
+          <button class="btn btn-sm btn-outline-light" @click="selectBudget(null, $event)">
+            <i class="fas fa-exchange-alt me-1"></i> Change Budget
+          </button>
 
-        <div class="table-responsive">
-          <table class="table table-sm">
-            <thead>
-            <tr>
-              <th>Category</th>
-              <th class="text-end">Amount</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr v-for="(transaction,category_name) in transactionsSummary(transactions)" v-bind:key="category_name">
-              <td>{{category_name || 'Uncategorized'}}</td>
-              <td class="text-end" :class="{'text-danger': transaction < 0, 'text-success': transaction > 0}">
-                {{formatCurrency(transaction)}}
-              </td>
-            </tr>
-            </tbody>
-          </table>
+          <div class="text-end">
+            <div class="small text-light-emphasis mb-1">Transactions</div>
+            <span class="badge rounded-pill bg-light text-dark">
+              {{ transactions.length }}
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -86,7 +76,6 @@ export default {
     },
     convertMilliUnitsToCurrencyAmount: ynab.utils.convertMilliUnitsToCurrencyAmount,
     transactionsTotal: R.pipe(R.map(R.prop("amount")), R.sum),
-    transactionsSummary: R.pipe(R.groupBy(R.prop('category_name')),R.map(R.pipe(R.map(R.prop("amount")),R.sum))),
     formatCurrency(milliunits) {
       const amount = this.convertMilliUnitsToCurrencyAmount(milliunits);
       return new Intl.NumberFormat('en-US', {
@@ -115,13 +104,12 @@ export default {
   transition: transform 0.2s;
 }
 
-.table-responsive {
-  max-height: 250px;
-  overflow-y: auto;
-}
-
 .text-end {
   text-align: right !important;
+}
+
+.text-light-emphasis {
+  opacity: 0.8;
 }
 
 /* Ensure all numeric values are right-aligned */

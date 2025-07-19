@@ -5,3 +5,22 @@
     </div>
   </div>
 </template>
+
+<script>
+export default {
+  computed: {
+    isAuthenticated() {
+      // Check if parent component has the YNAB token
+      return this.$parent && this.$parent.ynab && this.$parent.ynab.token;
+    }
+  },
+  methods: {
+    logout() {
+      // Call the logout method on the parent (App) component
+      if (this.$parent && typeof this.$parent.logout === 'function') {
+        this.$parent.logout();
+      }
+    }
+  }
+}
+</script>

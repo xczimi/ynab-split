@@ -15,7 +15,10 @@
       <div v-if="error" class="alert alert-danger p-4 mt-4">
         <h1 class="display-4">Oops!</h1>
         <p class="lead">{{ error }}</p>
-        <button class="btn btn-primary mt-3" @click="resetToken">Try Again &gt;</button>
+        <div class="mt-3">
+          <button class="btn btn-primary me-2" @click="resetToken(true)">Try Again &gt;</button>
+          <button class="btn btn-outline-secondary" @click="logout">Logout</button>
+        </div>
       </div>
 
       <!-- Otherwise show our app contents -->
@@ -135,7 +138,8 @@ export default {
     return {
       ynab: {
         clientId: config.clientId,
-        redirectUri: config.redirectUri,
+        // Use environment variable if available, otherwise fall back to config values
+        redirectUri: this.getRedirectUri(),
         token: null,
         api: null,
       },
@@ -179,7 +183,6 @@ export default {
   methods: {
     convertMilliUnitsToCurrencyAmount: ynab.utils.convertMilliUnitsToCurrencyAmount,
     transactionsTotal: R.pipe(R.map(R.prop("amount")), R.sum),
-    transactionsSummary: R.pipe(R.groupBy(R.prop('category_name')),R.map(R.project("amount"))),
     selectedBudget(budgetId, budgets) {
       return budgets.find(budget => budget.id === budgetId);
     },
@@ -201,7 +204,16 @@ export default {
         this.budgets = res.data.budgets;
         return res;
       }).catch((err) => {
-        this.error = err.error?.detail || err.message || 'An unknown error occurred';
+        console.error('Error fetching budgets:', err);
+        // Check if this is an authentication error
+        if (err.status === 401) {
+          // If unauthorized, we need to refresh the token
+          console.log('Unauthorized error, token may have expired');
+          this.logout(); // Full logout for auth errors
+        } else {
+          // For other errors, keep the token but show the error
+          this.error = err.error?.detail || err.message || 'An unknown error occurred';
+        }
       }).finally(() => {
         this.loading = false;
       });
@@ -220,7 +232,10 @@ export default {
       } else {
         console.log('Removing right budget ID from localStorage');
         localStorage.removeItem('ynab_right_budget_id');
+        this.loading = false;
+        return;
       }
+
       this.api.transactions.getTransactions(id, this.sinceDate).then((res) => {
         console.log('Right transactions received:', res.data.transactions.length);
         const filteredTransactions = R.filter(R.propEq(TransactionFlagColor.Orange, "flag_color"))(res.data.transactions);
@@ -229,6 +244,9 @@ export default {
       }).catch((err) => {
         console.error('Error fetching right transactions:', err);
         this.error = err.error?.detail || err.message || 'An unknown error occurred';
+        // Don't reset the token, just clear the current budget selection
+        localStorage.removeItem('ynab_right_budget_id');
+        this.rightBudgetId = null;
       }).finally(() => {
         this.loading = false;
       });
@@ -250,7 +268,10 @@ export default {
       } else {
         console.log('Removing left budget ID from localStorage');
         localStorage.removeItem('ynab_left_budget_id');
+        this.loading = false;
+        return;
       }
+
       this.api.transactions.getTransactions(id, this.sinceDate).then((res) => {
         console.log('Left transactions received:', res.data.transactions.length);
         const filteredTransactions = R.filter(R.propEq(TransactionFlagColor.Orange, "flag_color"))(res.data.transactions);
@@ -259,6 +280,9 @@ export default {
       }).catch((err) => {
         console.error('Error fetching left transactions:', err);
         this.error = err.error?.detail || err.message || 'An unknown error occurred';
+        // Don't reset the token, just clear the current budget selection
+        localStorage.removeItem('ynab_left_budget_id');
+        this.leftBudgetId = null;
       }).finally(() => {
         this.loading = false;
       });
@@ -295,17 +319,48 @@ export default {
       }
       return token;
     },
-    // Clear the token and start authorization over
-    resetToken() {
-      console.log('Resetting token and application state');
-      sessionStorage.removeItem('ynab_access_token');
+    // Reset application state but keep auth token when there's an error
+    resetToken(keepAuth = true) {
+      console.log('Resetting application state, keepAuth:', keepAuth);
+
+      // Only remove the token if explicitly requested (for logout)
+      if (!keepAuth) {
+        console.log('Removing YNAB authentication token');
+        sessionStorage.removeItem('ynab_access_token');
+        this.ynab.token = null;
+      }
+
+      // Always clear budget selections on reset
       localStorage.removeItem('ynab_left_budget_id');
       localStorage.removeItem('ynab_right_budget_id');
-      this.ynab.token = null;
       this.leftBudgetId = null;
       this.rightBudgetId = null;
       this.error = null;
       console.log('Application reset complete');
+    },
+
+    // Completely log out (clear token and state)
+    logout() {
+      console.log('Logging out');
+      this.resetToken(false); // false = don't keep auth
+      // Force page reload to ensure clean state
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+    },
+
+    // Get the redirect URI from environment variables or config
+    getRedirectUri() {
+      // Check for environment variable
+      if (process.env.VUE_APP_REDIRECT_URI) {
+        console.log('Using redirect URI from environment variable:', process.env.VUE_APP_REDIRECT_URI);
+        return process.env.VUE_APP_REDIRECT_URI;
+      }
+
+
+      // Fall back to default config value
+      console.log('Using default redirect URI from config:', config.redirectUri);
+      return config.redirectUri;
     }
   },
   // Specify which components we want to make available to our templates

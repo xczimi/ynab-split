@@ -1,5 +1,4 @@
 {
   "clientId": "x7Ro0UjaogQY_7VVTofErRZ2jWZQzAsTfs2vY94Mrxg",
-  "redirectUriLocal": "http://localhost:8080",
-  "redirectUri":"https://xczimi.github.io/ynab-split/"
+  "redirectUri": "https://xczimi.github.io/ynab-split/"
 }

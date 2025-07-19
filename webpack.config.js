@@ -35,6 +35,7 @@ export default {
     new VueLoaderPlugin(),
     new webpack.DefinePlugin({
       __VUE_PROD_DEVTOOLS__: JSON.stringify(false),
+      'process.env.VUE_APP_REDIRECT_URI': JSON.stringify(process.env.VUE_APP_REDIRECT_URI || null)
     }),
   ],
 };
