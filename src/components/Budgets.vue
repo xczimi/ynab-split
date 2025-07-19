@@ -1,37 +1,56 @@
 <template>
-  <div class="card text-white mb-3" :class="{ 'bg-primary': !budgetId, 'bg-success': total < otherTotal, 'bg-warning': otherTotal < total }" style="max-width: 20rem;">
+  <div class="card text-white mb-3 shadow h-100" :class="budgetColor" style="width: 100%;">
     <div class="card-header">{{ selectedBudget(budgetId, budgets)?.name }}</div>
-    <div v-if="!budgetId" class="budgets container">
-      <h4 class="card-title">Select budget</h4>
-      <p class="card-text">
-        <ul class="list-group">
-          <li v-for="budget in budgets" class="list-group-item d-flex justify-content-between align-items-center">
-            <a class="col" href="#" @click="selectBudget(budget.id, $event)">
-              {{ budget.name }}
-            </a>
-          </li>
-        </ul>
-      </p>
-    </div>
-    <div v-else class="budgets container">
-      <h4 class="card-title">Balance {{ convertMilliUnitsToCurrencyAmount(total) }}</h4>
+    <div v-if="!budgetId" class="budgets container p-3">
+      <h4 class="card-title text-center mb-3">Select Budget</h4>
       <div class="card-text">
-        <h5>{{ otherTotal > total ? "Owed" : "Owes" }} {{ convertMilliUnitsToCurrencyAmount((otherTotal - total) / 2) }}</h5>
-        <a href="#" @click="selectBudget(null, $event)">Change</a>
-        <table class="table">
-          <thead>
-          <tr>
-            <th>Category</th>
-            <th>Amount</th>
-          </tr>
-          </thead>
-          <tbody>
-          <tr v-for="(transaction,category_name) in transactionsSummary(transactions)" v-bind:key="category_name">
-            <td>{{category_name}}</td>
-            <td>{{convertMilliUnitsToCurrencyAmount(transaction).toFixed(2)}}</td>
-          </tr>
-          </tbody>
-        </table>
+        <div class="list-group shadow-sm">
+          <button v-for="budget in budgets"
+                  class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                  @click="selectBudget(budget.id, $event)">
+            <span>{{ budget.name }}</span>
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div v-else class="budgets container p-3">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="card-title mb-0">Balance</h4>
+        <span class="h4 mb-0 badge" :class="{'bg-success': total > 0, 'bg-danger': total < 0}">
+          {{ formatCurrency(total) }}
+        </span>
+      </div>
+      <div class="card-text">
+        <div class="alert" :class="{'alert-info': otherTotal > total, 'alert-success': otherTotal <= total}">
+          <div class="d-flex justify-content-between">
+            <strong>{{ otherTotal > total ? "Owed" : "Owes" }}</strong>
+            <span class="text-end">{{ formatCurrency(Math.abs((otherTotal - total) / 2)) }}</span>
+          </div>
+        </div>
+
+        <button class="btn btn-sm btn-outline-light mb-3" @click="selectBudget(null, $event)">
+          <i class="fas fa-exchange-alt me-1"></i> Change Budget
+        </button>
+
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead>
+            <tr>
+              <th>Category</th>
+              <th class="text-end">Amount</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="(transaction,category_name) in transactionsSummary(transactions)" v-bind:key="category_name">
+              <td>{{category_name || 'Uncategorized'}}</td>
+              <td class="text-end" :class="{'text-danger': transaction < 0, 'text-success': transaction > 0}">
+                {{formatCurrency(transaction)}}
+              </td>
+            </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -42,7 +61,25 @@ import * as R from 'ramda';
 import * as ynab from "ynab";
 
 export default {
-  props: ['budgets', 'selectBudget', 'budgetId', 'total', 'otherTotal', 'transactions'],
+  props: ['budgets', 'selectBudget', 'budgetId', 'total', 'otherTotal', 'transactions', 'budgetType'],
+  computed: {
+    budgetColor() {
+      // When no budget is selected, show blue
+      if (!this.budgetId) {
+        return 'bg-primary';
+      }
+
+      // Position-specific classes for left/right budget
+      if (this.budgetType === 'left') {
+        return 'bg-budget-left';
+      } else if (this.budgetType === 'right') {
+        return 'bg-budget-right';
+      }
+
+      // Default fallback colors based on balance comparison
+      return this.total < this.otherTotal ? 'bg-success' : 'bg-warning';
+    }
+  },
   methods: {
     selectedBudget(budgetId, budgets) {
       return R.find(R.propEq(budgetId, "id"))(budgets)
@@ -50,6 +87,65 @@ export default {
     convertMilliUnitsToCurrencyAmount: ynab.utils.convertMilliUnitsToCurrencyAmount,
     transactionsTotal: R.pipe(R.map(R.prop("amount")), R.sum),
     transactionsSummary: R.pipe(R.groupBy(R.prop('category_name')),R.map(R.pipe(R.map(R.prop("amount")),R.sum))),
+    formatCurrency(milliunits) {
+      const amount = this.convertMilliUnitsToCurrencyAmount(milliunits);
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2
+      }).format(amount);
+    },
   }
 }
 </script>
+
+<style scoped>
+.card {
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.card-header {
+  font-weight: bold;
+  padding: 1rem;
+}
+
+.list-group-item-action:hover {
+  transform: translateX(5px);
+  transition: transform 0.2s;
+}
+
+.table-responsive {
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.text-end {
+  text-align: right !important;
+}
+
+/* Ensure all numeric values are right-aligned */
+.badge, .alert span {
+  text-align: right;
+}
+
+/* CSS variables for budget colors to ensure consistency */
+:root {
+  --budget-left-color: #8a2be2; /* Purple by default */
+  --budget-right-color: #20c997; /* Teal by default */
+}
+
+/* Custom budget colors - named by position instead of color */
+.bg-budget-left {
+  background-color: var(--budget-left-color) !important;
+}
+
+.bg-budget-right {
+  background-color: var(--budget-right-color) !important;
+}
+
+/* Ensure text remains readable on custom backgrounds */
+.bg-budget-left, .bg-budget-right {
+  color: white !important;
+}
+</style>

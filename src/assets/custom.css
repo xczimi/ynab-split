@@ -1,0 +1,13 @@
+/**
+ * Custom Budget Colors
+ *
+ * You can override the default budget colors by uncommenting and modifying the variables below.
+ * This file is loaded globally and will override the default colors without changing the source code.
+ */
+
+:root {
+  --budget-left-color: #e22bc4;  /* Purple */
+  --budget-right-color: #20c997; /* Teal */
+}
+
+/* Add any other custom styles below */
