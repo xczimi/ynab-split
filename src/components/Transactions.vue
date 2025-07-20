@@ -17,7 +17,18 @@
         <tbody>
           <tr v-for="transaction in transactions" v-bind:key="transaction.id" class="transaction-row">
             <td>{{transaction.date}}</td>
-            <td>{{transaction.category_name || 'Uncategorized'}}</td>
+            <td>
+              <span v-if="transaction.category_group_name" class="category-cell">
+                <span class="category-group">{{ transaction.category_group_name }}</span>
+                <span class="category-separator"> › </span>
+                <span class="category-name" :class="{'transfer-category': isTransferCategory(transaction)}">
+                  {{ transaction.category_name || 'Uncategorized' }}
+                </span>
+              </span>
+              <span v-else :class="{'transfer-category': isTransferCategory(transaction)}">
+                {{ transaction.category_name || 'Uncategorized' }}
+              </span>
+            </td>
             <td>{{transaction.payee_name || '-'}}</td>
             <td>{{transaction.memo || '-'}}</td>
             <td class="text-end" :class="{'text-danger': transaction.amount < 0, 'text-success': transaction.amount > 0}">
@@ -31,24 +42,28 @@
 </template>
 
 <script>
-// Import utils from YNAB
-import {utils} from 'ynab';
-import * as R from 'ramda';
+// Import utils from our transaction utilities instead of direct YNAB SDK
+import { currencyUtils, transactionsTotal } from '../utils/transactions';
 
 export default {
   props: ['transactions'],
   methods: {
+    isTransferCategory(transaction) {
+      // Check if this is a transfer transaction
+      const category = (transaction.category_name || '').toLowerCase();
+      const memo = (transaction.memo || '').toLowerCase();
+      const payee = (transaction.payee_name || '').toLowerCase();
+
+      return category.includes('transfer') ||
+             memo.includes('transfer') ||
+             payee.includes('transfer');
+    },
     // Now we can make this method available to our template
     // So we can format this milliunits in the correct currency format
-    convertMilliUnitsToCurrencyAmount: utils.convertMilliUnitsToCurrencyAmount,
-    transactionsTotal: R.pipe(R.map(R.prop("amount")),R.sum),
+    convertMilliUnitsToCurrencyAmount: currencyUtils.convertMilliUnitsToCurrencyAmount,
+    transactionsTotal,
     formatCurrency(milliunits) {
-      const amount = this.convertMilliUnitsToCurrencyAmount(milliunits);
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 2
-      }).format(amount);
+      return currencyUtils.formatCurrency(milliunits);
     }
   }
 }
@@ -62,6 +77,31 @@ export default {
 
 .transaction-row:hover {
   background-color: rgba(0,0,0,0.05);
+}
+
+.category-cell {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.category-group {
+  color: #6c757d;
+  font-size: 0.9em;
+}
+
+.category-separator {
+  color: #adb5bd;
+  margin: 0 2px;
+}
+
+.category-name {
+  font-weight: 500;
+}
+
+.transfer-category {
+  font-style: italic;
+  color: #6c757d;
 }
 
 table {

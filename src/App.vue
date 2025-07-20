@@ -70,7 +70,42 @@
                       budgetType="right"/>
             </div>
           </div>
-          <div class="row">
+                      <!-- Trip Summary Section -->
+                      <div v-if="leftBudgetId && rightBudgetId" class="row mb-4">
+            <div class="col-12">
+              <TripSummary
+                :trips="tripSummaryData.trips"
+                :transactionsWithTrips="tripSummaryData.transactionsWithTrips"
+                @identify-trips="identifyTrips"
+              />
+            </div>
+          </div>
+
+          <!-- Transfer Summary Section -->
+          <div v-if="leftBudgetId && rightBudgetId" class="row mb-4">
+            <div class="col-12">
+              <TransferSummary
+                :leftTransactions="leftTransactions"
+                :rightTransactions="rightTransactions"
+                :selectedLeftBudget="selectedBudget(leftBudgetId, budgets)"
+                :selectedRightBudget="selectedBudget(rightBudgetId, budgets)"
+              />
+            </div>
+          </div>
+
+          <!-- Household Summary Section -->
+          <div v-if="leftBudgetId && rightBudgetId" class="row mb-4">
+            <div class="col-12">
+              <HouseholdSummary
+                :leftTransactions="leftTransactions"
+                :rightTransactions="rightTransactions"
+                :selectedLeftBudget="selectedBudget(leftBudgetId, budgets)"
+                :selectedRightBudget="selectedBudget(rightBudgetId, budgets)"
+              />
+            </div>
+          </div>
+
+                      <div class="row">
             <div class="col-12">
               <div class="card shadow-sm">
                 <div class="card-header bg-light">
@@ -78,12 +113,14 @@
                 </div>
                 <div class="card-body p-0">
                   <CombinedTransactions
+                    ref="combinedTransactions"
                     :leftTransactions="leftTransactions"
                     :rightTransactions="rightTransactions"
                     :leftBudgetId="leftBudgetId"
                     :rightBudgetId="rightBudgetId"
                     :selectedLeftBudget="selectedBudget(leftBudgetId, budgets)"
                     :selectedRightBudget="selectedBudget(rightBudgetId, budgets)"
+                    @trips-identified="handleTripsIdentified"
                   />
                 </div>
               </div>
@@ -117,9 +154,18 @@
 </style>
 
 <script>
-// Hooray! Here comes YNAB!
-import * as ynab from 'ynab';
-import * as R from 'ramda';
+// Import our transaction utilities instead of direct YNAB SDK
+import {
+  initializeYnabApi,
+  getBudgets,
+  getEnhancedTransactions,
+  currencyUtils,
+  transactionsTotal,
+  findBudgetById,
+  tokenUtils,
+  storageUtils,
+  errorUtils
+} from './utils/transactions';
 
 // Import our config for YNAB
 import config from './config.json';
@@ -130,7 +176,9 @@ import Footer from './components/Footer.vue';
 import Budgets from './components/Budgets.vue';
 import Transactions from './components/Transactions.vue';
 import CombinedTransactions from './components/CombinedTransactions.vue';
-import {TransactionFlagColor, utils} from "ynab";
+import TripSummary from './components/TripSummary.vue';
+import TransferSummary from './components/TransferSummary.vue';
+import HouseholdSummary from './components/HouseholdSummary.vue';
 
 export default {
   // The data to feed our templates
@@ -151,20 +199,25 @@ export default {
       rightBudgetId: null,
       rightTransactions: [],
       budgets: [],
+      // Data for trip summary
+      tripSummaryData: {
+        trips: [],
+        transactionsWithTrips: 0
+      },
     }
   },
   // When this component is created, check whether we need to get a token,
   // budgets or display the transactions
   created() {
     console.log('App component created');
-    this.ynab.token = this.findYNABToken();
+    this.ynab.token = tokenUtils.findYNABToken();
     console.log('YNAB token found:', this.ynab.token ? 'Yes' : 'No');
     if (this.ynab.token) {
-      this.api = new ynab.api(this.ynab.token);
+      this.api = initializeYnabApi(this.ynab.token);
 
       // Load saved budget IDs from localStorage
-      const savedLeftBudgetId = localStorage.getItem('ynab_left_budget_id');
-      const savedRightBudgetId = localStorage.getItem('ynab_right_budget_id');
+      const savedLeftBudgetId = storageUtils.getSavedBudgetId('left');
+      const savedRightBudgetId = storageUtils.getSavedBudgetId('right');
 
       // Get budgets first
       this.getBudgets();
@@ -181,143 +234,104 @@ export default {
     }
   },
   methods: {
-    convertMilliUnitsToCurrencyAmount: ynab.utils.convertMilliUnitsToCurrencyAmount,
-    transactionsTotal: R.pipe(R.map(R.prop("amount")), R.sum),
+    convertMilliUnitsToCurrencyAmount: currencyUtils.convertMilliUnitsToCurrencyAmount,
+    transactionsTotal,
     selectedBudget(budgetId, budgets) {
-      return budgets.find(budget => budget.id === budgetId);
+      return findBudgetById(budgetId, budgets);
     },
     formatCurrency(milliunits) {
-      const amount = this.convertMilliUnitsToCurrencyAmount(milliunits);
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 2
-      }).format(amount);
+      return currencyUtils.formatCurrency(milliunits);
     },
     // This uses the YNAB API to get a list of budgets
-    getBudgets() {
+    async getBudgets() {
       console.log('Getting budgets from YNAB API');
       this.loading = true;
       this.error = null;
-      return this.api.budgets.getBudgets().then((res) => {
-        console.log('Budgets received:', res.data.budgets.length);
-        this.budgets = res.data.budgets;
-        return res;
-      }).catch((err) => {
+      try {
+        this.budgets = await getBudgets(this.api);
+      } catch (err) {
         console.error('Error fetching budgets:', err);
         // Check if this is an authentication error
-        if (err.status === 401) {
+        if (errorUtils.isAuthError(err)) {
           // If unauthorized, we need to refresh the token
           console.log('Unauthorized error, token may have expired');
           this.logout(); // Full logout for auth errors
         } else {
           // For other errors, keep the token but show the error
-          this.error = err.error?.detail || err.message || 'An unknown error occurred';
+          this.error = errorUtils.getErrorMessage(err);
         }
-      }).finally(() => {
+      } finally {
         this.loading = false;
-      });
+      }
     },
     // This selects a budget and gets all the transactions in that budget
-    selectRightBudget(id) {
+    async selectRightBudget(id) {
       console.log('Selecting right budget:', id);
       this.loading = true;
       this.error = null;
       this.rightBudgetId = id;
       this.rightTransactions = [];
+
       // Save budget ID to localStorage
-      if (id) {
-        console.log('Saving right budget ID to localStorage');
-        localStorage.setItem('ynab_right_budget_id', id);
-      } else {
-        console.log('Removing right budget ID from localStorage');
-        localStorage.removeItem('ynab_right_budget_id');
+      storageUtils.saveBudgetId('right', id);
+
+      if (!id) {
         this.loading = false;
         return;
       }
 
-      this.api.transactions.getTransactions(id, this.sinceDate).then((res) => {
-        console.log('Right transactions received:', res.data.transactions.length);
-        const filteredTransactions = R.filter(R.propEq(TransactionFlagColor.Orange, "flag_color"))(res.data.transactions);
-        console.log('Filtered right transactions (Orange flag):', filteredTransactions.length);
-        this.rightTransactions = filteredTransactions;
-      }).catch((err) => {
+      try {
+        this.rightTransactions = await getEnhancedTransactions(this.api, id, this.sinceDate);
+      } catch (err) {
         console.error('Error fetching right transactions:', err);
-        this.error = err.error?.detail || err.message || 'An unknown error occurred';
+        this.error = errorUtils.getErrorMessage(err);
         // Don't reset the token, just clear the current budget selection
-        localStorage.removeItem('ynab_right_budget_id');
+        storageUtils.saveBudgetId('right', null);
         this.rightBudgetId = null;
-      }).finally(() => {
-        this.loading = false;
-      });
-      if(id) {
-      } else {
+      } finally {
         this.loading = false;
       }
     },
-    selectLeftBudget(id) {
+    async selectLeftBudget(id) {
       console.log('Selecting left budget:', id);
       this.loading = true;
       this.error = null;
       this.leftBudgetId = id;
       this.leftTransactions = [];
+
       // Save budget ID to localStorage
-      if (id) {
-        console.log('Saving left budget ID to localStorage');
-        localStorage.setItem('ynab_left_budget_id', id);
-      } else {
-        console.log('Removing left budget ID from localStorage');
-        localStorage.removeItem('ynab_left_budget_id');
+      storageUtils.saveBudgetId('left', id);
+
+      if (!id) {
         this.loading = false;
         return;
       }
 
-      this.api.transactions.getTransactions(id, this.sinceDate).then((res) => {
-        console.log('Left transactions received:', res.data.transactions.length);
-        const filteredTransactions = R.filter(R.propEq(TransactionFlagColor.Orange, "flag_color"))(res.data.transactions);
-        console.log('Filtered left transactions (Orange flag):', filteredTransactions.length);
-        this.leftTransactions = filteredTransactions;
-      }).catch((err) => {
+      try {
+        this.leftTransactions = await getEnhancedTransactions(this.api, id, this.sinceDate);
+      } catch (err) {
         console.error('Error fetching left transactions:', err);
-        this.error = err.error?.detail || err.message || 'An unknown error occurred';
+        this.error = errorUtils.getErrorMessage(err);
         // Don't reset the token, just clear the current budget selection
-        localStorage.removeItem('ynab_left_budget_id');
+        storageUtils.saveBudgetId('left', null);
         this.leftBudgetId = null;
-      }).finally(() => {
+      } finally {
         this.loading = false;
-      });
+      }
     },
     // This builds a URI to get an access token from YNAB
     // https://api.ynab.com/#outh-applications
     authorizeWithYNAB(e) {
       console.log('Authorizing with YNAB');
       e.preventDefault();
-      const uri = `https://app.ynab.com/oauth/authorize?client_id=${this.ynab.clientId}&redirect_uri=${this.ynab.redirectUri}&response_type=token`;
+      const uri = tokenUtils.buildAuthUrl(this.ynab.clientId, this.ynab.redirectUri);
       console.log('Redirect URI:', this.ynab.redirectUri);
       location.replace(uri);
     },
     // Method to find a YNAB token
     // First it looks in the location.hash and then sessionStorage
     findYNABToken() {
-      console.log('Finding YNAB token');
-      let token = null;
-      const search = window.location.hash.substring(1).replace(/&/g, '","').replace(/=/g, '":"');
-      console.log('URL hash present:', search && search !== '');
-      if (search && search !== '') {
-        // Try to get access_token from the hash returned by OAuth
-        const params = JSON.parse('{"' + search + '"}', function (key, value) {
-          return key === '' ? value : decodeURIComponent(value);
-        });
-        token = params.access_token;
-        console.log('Token found in URL hash, storing in sessionStorage');
-        sessionStorage.setItem('ynab_access_token', token);
-        window.location.hash = '';
-      } else {
-        // Otherwise try sessionStorage
-        token = sessionStorage.getItem('ynab_access_token');
-        console.log('Token from sessionStorage:', token ? 'Found' : 'Not found');
-      }
-      return token;
+      return tokenUtils.findYNABToken();
     },
     // Reset application state but keep auth token when there's an error
     resetToken(keepAuth = true) {
@@ -326,13 +340,12 @@ export default {
       // Only remove the token if explicitly requested (for logout)
       if (!keepAuth) {
         console.log('Removing YNAB authentication token');
-        sessionStorage.removeItem('ynab_access_token');
+        tokenUtils.removeToken();
         this.ynab.token = null;
       }
 
       // Always clear budget selections on reset
-      localStorage.removeItem('ynab_left_budget_id');
-      localStorage.removeItem('ynab_right_budget_id');
+      storageUtils.clearBudgetIds();
       this.leftBudgetId = null;
       this.rightBudgetId = null;
       this.error = null;
@@ -361,6 +374,20 @@ export default {
       // Fall back to default config value
       console.log('Using default redirect URI from config:', config.redirectUri);
       return config.redirectUri;
+      },
+
+    // Handler for trips-identified event from CombinedTransactions
+    handleTripsIdentified(data) {
+      console.log('Trips identified:', data.trips.length);
+      this.tripSummaryData = data;
+    },
+
+    // Method to trigger trip identification from parent
+    identifyTrips() {
+      // Trigger the trip identification process in the CombinedTransactions component
+      if (this.$refs.combinedTransactions) {
+        this.$refs.combinedTransactions.triggerTripIdentification();
+      }
     }
   },
   // Specify which components we want to make available to our templates
@@ -369,7 +396,10 @@ export default {
     Footer,
     Budgets,
     Transactions,
-    CombinedTransactions
+    CombinedTransactions,
+    TripSummary,
+    TransferSummary,
+    HouseholdSummary
   },
 }
 </script>

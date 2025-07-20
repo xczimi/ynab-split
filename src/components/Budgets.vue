@@ -47,8 +47,7 @@
 </template>
 
 <script>
-import * as R from 'ramda';
-import * as ynab from "ynab";
+import { currencyUtils, transactionsTotal, findBudgetById } from '../utils/transactions';
 
 export default {
   props: ['budgets', 'selectBudget', 'budgetId', 'total', 'otherTotal', 'transactions', 'budgetType'],
@@ -72,17 +71,12 @@ export default {
   },
   methods: {
     selectedBudget(budgetId, budgets) {
-      return R.find(R.propEq(budgetId, "id"))(budgets)
+      return findBudgetById(budgetId, budgets);
     },
-    convertMilliUnitsToCurrencyAmount: ynab.utils.convertMilliUnitsToCurrencyAmount,
-    transactionsTotal: R.pipe(R.map(R.prop("amount")), R.sum),
+    convertMilliUnitsToCurrencyAmount: currencyUtils.convertMilliUnitsToCurrencyAmount,
+    transactionsTotal,
     formatCurrency(milliunits) {
-      const amount = this.convertMilliUnitsToCurrencyAmount(milliunits);
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 2
-      }).format(amount);
+      return currencyUtils.formatCurrency(milliunits);
     },
   }
 }
