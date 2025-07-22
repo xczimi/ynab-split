@@ -202,15 +202,9 @@ export function generateTripName(tripTransactions, tripIndex) {
   if (startDate.toMillis() === endDate.toMillis()) {
     // Single day trip: trip2024Jan15
     return `trip${startYear}${monthNames[startDate.month - 1]}${startDate.day}`;
-  } else if (startDate.month === endDate.month && startDate.year === endDate.year) {
-    // Same month trip: trip2024Jan15-16
-    return `trip${startYear}${monthNames[startDate.month - 1]}${startDate.day}-${endDate.day}`;
-  } else if (startDate.year === endDate.year) {
-    // Same year, different months: trip2024Jan26-Feb02
-    return `trip${startYear}${monthNames[startDate.month - 1]}${startDate.day}-${monthNames[endDate.month - 1]}${endDate.day}`;
   } else {
-    // Multi-year trip: trip2023Dec30-2024Jan05
-    return `trip${startYear}${monthNames[startDate.month - 1]}${startDate.day}-${endYear}${monthNames[endDate.month - 1]}${endDate.day}`;
+    // Multi-day trip: trip2024Jan15 (no end date)
+    return `trip${startYear}${monthNames[startDate.month - 1]}${startDate.day}`;
   }
 }
 

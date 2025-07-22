@@ -140,22 +140,87 @@
             <td>{{ transaction.memo || '-' }}</td>
             <td>
               <!-- Transfer designation -->
-              <span v-if="transaction.hasTransferTag" class="badge bg-warning text-dark designation-badge">
+              <span v-if="transaction.hasTransferTag && !isEditingDesignation(transaction.id)"
+                    class="badge bg-warning text-dark designation-badge clickable-designation"
+                    @click="startEditingDesignation(transaction.id)"
+                    title="Click to edit designation">
                 #transfer
-                <i class="fas fa-exchange-alt ms-1" title="Transfer transaction"></i>
+                <i class="fas fa-exchange-alt ms-1"></i>
               </span>
               <!-- Household designation -->
-              <span v-else-if="transaction.hasHouseholdTag" class="badge bg-success designation-badge">
+              <span v-else-if="transaction.hasHouseholdTag && !isEditingDesignation(transaction.id)"
+                    class="badge bg-success designation-badge clickable-designation"
+                    @click="startEditingDesignation(transaction.id)"
+                    title="Click to edit designation">
                 #household
-                <i class="fas fa-home ms-1" title="Household expense"></i>
+                <i class="fas fa-home ms-1"></i>
               </span>
               <!-- Trip designation -->
-              <span v-else-if="transaction.tripName" class="badge bg-primary designation-badge">
+              <span v-else-if="transaction.tripName && !isEditingDesignation(transaction.id)"
+                    class="badge bg-primary designation-badge clickable-designation"
+                    @click="startEditingDesignation(transaction.id)"
+                    title="Click to edit trip">
                 #{{ transaction.tripName }}
-                <i class="fas fa-suitcase ms-1" title="Trip expense"></i>
+                <i class="fas fa-suitcase ms-1"></i>
               </span>
               <!-- No designation -->
-              <span v-else class="text-muted">-</span>
+              <span v-else-if="!isEditingDesignation(transaction.id)"
+                    class="text-muted clickable-designation"
+                    @click="startEditingDesignation(transaction.id)"
+                    title="Click to add designation">
+                <i class="fas fa-plus-circle me-1"></i>Add
+              </span>
+
+              <!-- Edit mode -->
+              <div v-if="isEditingDesignation(transaction.id)" class="designation-editor">
+                <select
+                  class="form-select form-select-sm me-2"
+                  style="width: 120px; display: inline-block;"
+                  v-model="editingDesignationType"
+                  @change="onDesignationTypeChange"
+                >
+                  <option value="">None</option>
+                  <option value="transfer">Transfer</option>
+                  <option value="household">Household</option>
+                  <option value="trip">Trip</option>
+                </select>
+
+                <!-- Trip name input for existing trips -->
+                <select v-if="editingDesignationType === 'trip'"
+                        class="form-select form-select-sm me-2"
+                        style="width: 150px; display: inline-block;"
+                        v-model="editingTripName"
+                        @change="onTripNameChange">
+                  <option value="">Select existing trip...</option>
+                  <option v-for="trip in availableTrips" :key="trip" :value="trip">
+                    #{{ trip }}
+                  </option>
+                  <option value="__custom__">Create new trip...</option>
+                </select>
+
+                <!-- Custom trip name input -->
+                <input v-if="editingDesignationType === 'trip' && editingTripName === '__custom__'"
+                       type="text"
+                       class="form-control form-control-sm me-2"
+                       style="width: 150px; display: inline-block;"
+                       v-model="customTripName"
+                       placeholder="Enter trip name..."
+                       @keyup.enter="saveDesignation(transaction)"
+                       @keyup.escape="cancelEditing">
+
+                <!-- Action buttons -->
+                <button class="btn btn-sm btn-success me-1"
+                        @click="saveDesignation(transaction)"
+                        :disabled="!canSaveDesignation"
+                        title="Save changes">
+                  <i class="fas fa-check"></i>
+                </button>
+                <button class="btn btn-sm btn-secondary"
+                        @click="cancelEditing"
+                        title="Cancel">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
             </td>
             <td class="text-end" :class="{'text-danger': transaction.amount < 0, 'text-success': transaction.amount > 0}">
               {{ formatCurrency(transaction.amount) }}
@@ -192,7 +257,12 @@ export default {
       showHousehold: false,
       showTrips: false,
       showUndesignated: false, // New toggle for undesignated transactions
-      selectedTripFilter: '' // Trip filter dropdown
+      selectedTripFilter: '', // Trip filter dropdown
+      // Editing state
+      editingDesignationId: null, // Track which transaction is being edited
+      editingDesignationType: '', // For tracking designation type during editing
+      editingTripName: '', // For tracking trip name during editing
+      customTripName: '' // For custom trip name input
     };
   },
 
@@ -263,6 +333,17 @@ export default {
     tripsProcessed() {
       // Check if any transactions have trip assignments
       return this.transactions.some(t => t.tripName);
+    },
+
+    canSaveDesignation() {
+      // Ensure we have a valid designation type and trip name (if applicable)
+      if (!this.editingDesignationType) {
+        return false;
+      }
+      if (this.editingDesignationType === 'trip' && !this.editingTripName) {
+        return false;
+      }
+      return true;
     }
   },
 
@@ -308,7 +389,94 @@ export default {
       this.$emit('trips-reset');
 
       console.log('Trips reset - all trip data cleared');
-    }
+    },
+
+    isEditingDesignation(transactionId) {
+      return this.editingDesignationId === transactionId;
+    },
+
+    startEditingDesignation(transactionId) {
+      // Set the editing designation state for the transaction
+      this.editingDesignationId = transactionId;
+
+      // Initialize editing values based on current transaction state
+      const transaction = this.combinedTransactions.find(t => t.id === transactionId);
+      if (transaction.hasTransferTag) {
+        this.editingDesignationType = 'transfer';
+        this.editingTripName = '';
+      } else if (transaction.hasHouseholdTag) {
+        this.editingDesignationType = 'household';
+        this.editingTripName = '';
+      } else if (transaction.tripName) {
+        this.editingDesignationType = 'trip';
+        this.editingTripName = transaction.tripName;
+      } else {
+        this.editingDesignationType = '';
+        this.editingTripName = '';
+      }
+      this.customTripName = '';
+    },
+
+    cancelEditing() {
+      // Cancel editing mode
+      this.editingDesignationId = null;
+      this.editingDesignationType = '';
+      this.editingTripName = '';
+      this.customTripName = '';
+    },
+
+    onDesignationTypeChange() {
+      // Reset trip name when changing designation type
+      this.editingTripName = '';
+      this.customTripName = '';
+    },
+
+    onTripNameChange() {
+      // If custom trip name is selected, clear the custom input
+      if (this.editingTripName === '__custom__') {
+        this.customTripName = '';
+      }
+    },
+
+    saveDesignation(transaction) {
+      // Determine the final trip name
+      let finalTripName = '';
+      if (this.editingDesignationType === 'trip') {
+        finalTripName = this.editingTripName === '__custom__' ? this.customTripName : this.editingTripName;
+      }
+
+      // Emit event to save the designation changes
+      this.$emit('transaction-updated', {
+        ...transaction,
+        // Update the designation flags based on selection
+        hasTransferTag: this.editingDesignationType === 'transfer',
+        hasHouseholdTag: this.editingDesignationType === 'household',
+        tripName: finalTripName || null,
+        // Update memo to include the new hashtag
+        memo: this.updateMemoWithDesignation(transaction.memo, this.editingDesignationType, finalTripName)
+      });
+
+      // Exit editing mode
+      this.cancelEditing();
+    },
+
+    updateMemoWithDesignation(originalMemo, designationType, tripName) {
+      let memo = originalMemo || '';
+
+      // Remove existing designation hashtags
+      memo = memo.replace(/#(transfer|household|trip\w*)/gi, '').trim();
+
+      // Add new designation hashtag
+      if (designationType === 'transfer') {
+        memo = memo ? `${memo} #transfer` : '#transfer';
+      } else if (designationType === 'household') {
+        memo = memo ? `${memo} #household` : '#household';
+      } else if (designationType === 'trip' && tripName) {
+        memo = memo ? `${memo} #${tripName}` : `#${tripName}`;
+      }
+
+      return memo;
+    },
   }
 }
 </script>
@@ -418,5 +586,17 @@ table {
 .designation-badge i {
   font-size: 0.6rem;
   margin-left: 4px;
+}
+
+/* Styles for clickable designation elements */
+.clickable-designation {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.designation-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 </style>
