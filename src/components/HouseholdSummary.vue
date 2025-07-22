@@ -93,11 +93,11 @@
 export default {
   name: 'HouseholdSummary',
   props: {
-    leftTransactions: {
+    transactions: {
       type: Array,
       default: () => []
     },
-    rightTransactions: {
+    allTransactions: {
       type: Array,
       default: () => []
     },
@@ -112,48 +112,23 @@ export default {
   },
   data() {
     return {
-      showDetails: true
+      showDetails: false
     };
   },
   computed: {
-    allTransactions() {
-      // Combine transactions with source information
-      const leftWithSource = this.leftTransactions.map(t => ({
-        ...t,
-        source: 'left',
-        budgetName: this.selectedLeftBudget?.name || 'Left Budget'
-      }));
-
-      const rightWithSource = this.rightTransactions.map(t => ({
-        ...t,
-        source: 'right',
-        budgetName: this.selectedRightBudget?.name || 'Right Budget'
-      }));
-
-      return [...leftWithSource, ...rightWithSource];
-    },
-
-    householdTransactions() {
-      return this.allTransactions.filter(transaction => {
-        // Check for #household hashtag in memo
-        const memo = (transaction.memo || '').toLowerCase();
-        if (memo.includes('#household')) {
-          return true;
-        }
-
-        // Check for "bill" in category or category group
-        const category = (transaction.category_name || '').toLowerCase();
-        const categoryGroup = (transaction.category_group_name || '').toLowerCase();
-        return category.includes('bill') || categoryGroup.includes('bill');
-      });
-    },
-
     monthlyData() {
-      if (!this.householdTransactions.length) return [];
+      console.log('HouseholdSummary: Processing', this.transactions.length, 'household transactions');
+
+      if (!this.transactions.length) {
+        console.log('HouseholdSummary: No transactions to process');
+        return [];
+      }
+
+      console.log('HouseholdSummary: Sample transaction:', this.transactions[0]);
 
       const monthlyGroups = {};
 
-      this.householdTransactions.forEach(transaction => {
+      this.transactions.forEach(transaction => {
         const date = new Date(transaction.date);
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
@@ -192,11 +167,14 @@ export default {
       });
 
       // Add daily average calculation
-      return Object.values(monthlyGroups).map(group => ({
+      const result = Object.values(monthlyGroups).map(group => ({
         ...group,
         daysInMonth: new Date(group.year, group.month, 0).getDate(),
         dailyAverage: group.totalAmount / new Date(group.year, group.month, 0).getDate()
       }));
+
+      console.log('HouseholdSummary: Generated monthly data:', result.length, 'months');
+      return result;
     },
 
     sortedMonthlyData() {
@@ -210,7 +188,7 @@ export default {
     },
 
     totalHouseholdTransactions() {
-      return this.householdTransactions.length;
+      return this.transactions.length;
     },
 
     totalLeftAmount() {

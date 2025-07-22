@@ -44,12 +44,22 @@
 <script>
 // Import utils from our transaction utilities instead of direct YNAB SDK
 import { currencyUtils, transactionsTotal } from '../utils/transactions';
+// Import hashtag utilities from designator for transfer detection
+import { extractHashtags } from '../utils/designator';
 
 export default {
   props: ['transactions'],
   methods: {
     isTransferCategory(transaction) {
-      // Check if this is a transfer transaction
+      // Check if this is a transfer transaction using the new designator utilities
+      const hashtags = extractHashtags(transaction);
+      const hasTransferTag = hashtags.some(tag => tag.toLowerCase() === 'transfer');
+
+      if (hasTransferTag) {
+        return true;
+      }
+
+      // Otherwise check category, memo and payee
       const category = (transaction.category_name || '').toLowerCase();
       const memo = (transaction.memo || '').toLowerCase();
       const payee = (transaction.payee_name || '').toLowerCase();

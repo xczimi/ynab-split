@@ -1,31 +1,48 @@
 /**
- * Trip identification utilities for transaction data
+ * Transaction designation utilities for hashtags, transfers, and household expenses
  */
 
-// Default settings for trip detection
-export const DEFAULT_SETTINGS = {
-  // Max days between transactions to be considered part of the same trip
-  maxDaysBetween: 3,
-  // Exclude positive transactions (these are likely transfers between budgets)
-  excludePositiveTransactions: false
-  // No longer using billKeywords - just check for "bill" in category names
-};
+import { DateTime } from 'luxon';
+import {
+  extractAllHashtags,
+  processTransactionsWithTrips as pureProcessTransactionsWithTrips,
+  getTripSummaries,
+  shouldIncludeTransactionInTrip,
+  DEFAULT_TRIP_SETTINGS
+} from './trips.js';
 
 /**
- * Extract all hashtags from transaction memo
- * @param {Object} transaction - Transaction object
- * @returns {Array} - Array of all hashtags without the # symbol
+ * Create a DateTime object in America/Vancouver timezone
+ * @param {string|Date} dateInput - Date string or Date object
+ * @returns {DateTime} - DateTime object in Vancouver timezone
  */
-export function extractAllHashtags(transaction) {
-  if (!transaction.memo) return [];
+function createVancouverDateTime(dateInput) {
+  if (!dateInput) return null;
 
-  const memo = transaction.memo || '';
-  const hashtagRegex = /#([a-zA-Z0-9_]+)/g;
-  const matches = [...memo.matchAll(hashtagRegex)];
+  // If it's already a Date object, convert to ISO string first
+  const dateString = dateInput instanceof Date ? dateInput.toISOString().split('T')[0] : dateInput;
 
-  // Return all hashtags
-  return matches.map(match => match[1]);
+  // Parse the date string and set timezone to America/Vancouver
+  return DateTime.fromISO(dateString, { zone: 'America/Vancouver' });
 }
+
+/**
+ * Calculate difference in days between two dates in Vancouver timezone
+ * @param {string|Date} date1 - First date
+ * @param {string|Date} date2 - Second date
+ * @returns {number} - Difference in days
+ */
+function getDaysDifference(date1, date2) {
+  const vancouverDate1 = createVancouverDateTime(date1);
+  const vancouverDate2 = createVancouverDateTime(date2);
+  return Math.abs(vancouverDate1.diff(vancouverDate2, 'days').days);
+}
+
+// Default settings for designation
+export const DEFAULT_SETTINGS = DEFAULT_TRIP_SETTINGS;
+
+// Re-export the already imported functions
+export { extractAllHashtags, getTripSummaries };
 
 /**
  * Filter hashtags to only include trip hashtags or special tags
@@ -66,7 +83,7 @@ export function isTransferTransaction(transaction, allTransactions = []) {
     return false;
   }
 
-  const transactionDate = new Date(transaction.date);
+  const transactionDate = createVancouverDateTime(transaction.date);
   const transactionAmount = Math.abs(transaction.amount);
 
   // Look for matching transactions in other budgets within 3 days
@@ -86,9 +103,8 @@ export function isTransferTransaction(transaction, allTransactions = []) {
       return false;
     }
 
-    // Check if dates are within 3 days
-    const otherDate = new Date(otherTransaction.date);
-    const daysDifference = Math.abs(transactionDate - otherDate) / (1000 * 60 * 60 * 24);
+    // Check if dates are within 3 days using Vancouver timezone
+    const daysDifference = getDaysDifference(transaction.date, otherTransaction.date);
 
     return daysDifference <= 3;
   });
@@ -165,97 +181,42 @@ export function addHashtagsToTransactions(transactions) {
 }
 
 /**
- * Process transactions and identify trips based on hashtags
- * @param {Array} transactions - Array of transaction objects
- * @param {Object} settings - Settings object
- * @returns {Array} - Array of transactions with trip information
- */
-export function processTransactionsWithTrips(transactions, settings = DEFAULT_SETTINGS) {
-  // First convert dates if they're strings
-  const transactionsWithDates = transactions.map(t => ({
-    ...t,
-    date: t.date instanceof Date ? t.date : new Date(t.date)
-  }));
-
-  // Filter transactions that should be included
-  const filteredTransactions = transactionsWithDates.filter(t =>
-    shouldIncludeTransaction(t, settings)
-  );
-
-  // Process hashtags and add trip information
-  return filteredTransactions.map(transaction => {
-    const hashtags = extractHashtags(transaction);
-
-    // Only use hashtags that start with 'trip' for the tripName
-    const tripHashtags = hashtags.filter(tag => tag.toLowerCase().startsWith('trip'));
-    const tripName = tripHashtags.length > 0 ? tripHashtags[0] : null;
-
-    return {
-      ...transaction,
-      hashtags,
-      tripName,
-      date: transaction.date.toISOString().split('T')[0] // Convert back to string format
-    };
-  });
-}
-
-/**
- * Get summary information about trips
- * @param {Array} transactions - Processed transactions with trip information
- * @returns {Array} - Array of trip summary objects
- */
-export function getTripSummaries(transactions) {
-  const tripGroups = {};
-
-  // Group transactions by trip
-  transactions.forEach(transaction => {
-    if (transaction.tripName) {
-      if (!tripGroups[transaction.tripName]) {
-        tripGroups[transaction.tripName] = [];
-      }
-
-      tripGroups[transaction.tripName].push(transaction);
-    }
-  });
-
-  // Create summary for each trip
-  return Object.entries(tripGroups).map(([tripName, tripTransactions]) => {
-    // Get dates as actual Date objects for comparison
-    const dates = tripTransactions.map(t => new Date(t.date));
-    const startDate = new Date(Math.min(...dates));
-    const endDate = new Date(Math.max(...dates));
-
-    // Calculate total spending for this trip
-    const totalSpending = tripTransactions.reduce(
-      (sum, t) => sum + (t.amount < 0 ? t.amount : 0), 0
-    );
-
-    return {
-      name: tripName,
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0],
-      transactionCount: tripTransactions.length,
-      totalSpending
-    };
-  });
-}
-
-/**
  * Check if a transaction should be included in trip processing
  * @param {Object} transaction - Transaction object
  * @param {Object} settings - Settings object
  * @returns {boolean} - True if transaction should be included
  */
 export function shouldIncludeTransaction(transaction, settings = DEFAULT_SETTINGS) {
-  // Exclude positive transactions if setting is enabled
-  if (settings.excludePositiveTransactions && transaction.amount > 0) {
-    return false;
-  }
+  // Use the trip utility but add bill checking and transfer checking
+  const shouldIncludeForTrip = shouldIncludeTransactionInTrip(transaction, settings);
 
   // Exclude transactions that appear to be bills
   if (isBillTransaction(transaction)) {
     return false;
   }
 
-  return true;
+  // Exclude transactions that have transfer tags (automatic or manual)
+  if (transaction.hasTransferTag) {
+    return false;
+  }
+
+  // Also check if the memo contains #transfer (in case it hasn't been processed yet)
+  const memo = (transaction.memo || '').toLowerCase();
+  if (memo.includes('#transfer')) {
+    return false;
+  }
+
+  return shouldIncludeForTrip;
 }
+
+/**
+ * Wrapper for processTransactionsWithTrips that uses designator's shouldIncludeTransaction
+ * This ensures bill transactions are properly excluded from trip processing
+ */
+export function processTransactionsWithTripsWrapper(transactions, settings = DEFAULT_SETTINGS) {
+  // Use the designator's shouldIncludeTransaction which includes bill checking
+  return pureProcessTransactionsWithTrips(transactions, settings, shouldIncludeTransaction);
+}
+
+// Override the re-export to use our wrapper
+export { processTransactionsWithTripsWrapper as processTransactionsWithTrips };

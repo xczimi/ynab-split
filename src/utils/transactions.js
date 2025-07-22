@@ -243,3 +243,59 @@ export const errorUtils = {
     return error.error?.detail || error.message || 'An unknown error occurred';
   }
 };
+
+/**
+ * Transaction sorting utilities
+ */
+export const sortingUtils = {
+  /**
+   * Sort transactions by date with secondary sort by transaction ID
+   * @param {Array} transactions - Array of transaction objects
+   * @param {string} order - 'newest' (default) or 'oldest'
+   * @returns {Array} - Sorted array of transactions
+   */
+  sortTransactionsByDate(transactions, order = 'newest') {
+    if (!Array.isArray(transactions) || transactions.length === 0) {
+      return [];
+    }
+
+    return [...transactions].sort((a, b) => {
+      // Parse dates for comparison
+      const dateA = new Date(a.date);
+      const dateB = new Date(b.date);
+
+      // Primary sort: by date
+      let dateComparison;
+      if (order === 'oldest') {
+        dateComparison = dateA.getTime() - dateB.getTime(); // oldest first
+      } else {
+        dateComparison = dateB.getTime() - dateA.getTime(); // newest first (default)
+      }
+
+      // If dates are the same, sort by transaction ID for consistent ordering
+      if (dateComparison === 0) {
+        return (a.id || '').localeCompare(b.id || '');
+      }
+
+      return dateComparison;
+    });
+  },
+
+  /**
+   * Sort transactions by date (newest first) - convenience method
+   * @param {Array} transactions - Array of transaction objects
+   * @returns {Array} - Sorted array of transactions (newest first)
+   */
+  sortNewestFirst(transactions) {
+    return this.sortTransactionsByDate(transactions, 'newest');
+  },
+
+  /**
+   * Sort transactions by date (oldest first) - convenience method
+   * @param {Array} transactions - Array of transaction objects
+   * @returns {Array} - Sorted array of transactions (oldest first)
+   */
+  sortOldestFirst(transactions) {
+    return this.sortTransactionsByDate(transactions, 'oldest');
+  }
+};

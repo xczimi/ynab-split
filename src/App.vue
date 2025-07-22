@@ -56,24 +56,39 @@
         <div v-else>
           <div class="row mb-4">
             <div class="col-md-6 mb-4 mb-md-0">
-              <Budgets :budgets="budgets" :budgetId="leftBudgetId" :selectBudget="selectLeftBudget"
-                      :transactions="leftTransactions"
-                      :total="transactionsTotal(leftTransactions)"
-                      :otherTotal="transactionsTotal(rightTransactions)"
-                      budgetType="left"/>
+              <Budget
+                :budgets="budgets"
+                :budgetId="leftBudgetId"
+                budgetType="left"
+                :otherTotal="rightTotal"
+                :api="api"
+                :sinceDate="sinceDate"
+                @budget-selected="handleLeftBudgetSelected"
+                @transactions-loaded="handleTransactionsLoaded"
+                @budget-error="handleBudgetError"
+                @budget-loading-changed="handleBudgetLoadingChanged"
+              />
             </div>
             <div class="col-md-6">
-              <Budgets :budgets="budgets" :budgetId="rightBudgetId" :selectBudget="selectRightBudget"
-                      :transactions="rightTransactions"
-                      :total="transactionsTotal(rightTransactions)"
-                      :otherTotal="transactionsTotal(leftTransactions)"
-                      budgetType="right"/>
+              <Budget
+                :budgets="budgets"
+                :budgetId="rightBudgetId"
+                budgetType="right"
+                :otherTotal="leftTotal"
+                :api="api"
+                :sinceDate="sinceDate"
+                @budget-selected="handleRightBudgetSelected"
+                @transactions-loaded="handleTransactionsLoaded"
+                @budget-error="handleBudgetError"
+                @budget-loading-changed="handleBudgetLoadingChanged"
+              />
             </div>
           </div>
                       <!-- Trip Summary Section -->
                       <div v-if="leftBudgetId && rightBudgetId" class="row mb-4">
             <div class="col-12">
               <TripSummary
+                :transactions="tripTransactions"
                 :trips="tripSummaryData.trips"
                 :transactionsWithTrips="tripSummaryData.transactionsWithTrips"
                 @identify-trips="identifyTrips"
@@ -85,8 +100,8 @@
           <div v-if="leftBudgetId && rightBudgetId" class="row mb-4">
             <div class="col-12">
               <TransferSummary
-                :leftTransactions="leftTransactions"
-                :rightTransactions="rightTransactions"
+                :transactions="transferTransactions"
+                :allTransactions="transactionsWithDesignations"
                 :selectedLeftBudget="selectedBudget(leftBudgetId, budgets)"
                 :selectedRightBudget="selectedBudget(rightBudgetId, budgets)"
               />
@@ -97,15 +112,15 @@
           <div v-if="leftBudgetId && rightBudgetId" class="row mb-4">
             <div class="col-12">
               <HouseholdSummary
-                :leftTransactions="leftTransactions"
-                :rightTransactions="rightTransactions"
+                :transactions="householdTransactions"
+                :allTransactions="transactionsWithDesignations"
                 :selectedLeftBudget="selectedBudget(leftBudgetId, budgets)"
                 :selectedRightBudget="selectedBudget(rightBudgetId, budgets)"
               />
             </div>
           </div>
 
-                      <div class="row">
+          <div class="row">
             <div class="col-12">
               <div class="card shadow-sm">
                 <div class="card-header bg-light">
@@ -114,13 +129,11 @@
                 <div class="card-body p-0">
                   <CombinedTransactions
                     ref="combinedTransactions"
-                    :leftTransactions="leftTransactions"
-                    :rightTransactions="rightTransactions"
-                    :leftBudgetId="leftBudgetId"
-                    :rightBudgetId="rightBudgetId"
-                    :selectedLeftBudget="selectedBudget(leftBudgetId, budgets)"
-                    :selectedRightBudget="selectedBudget(rightBudgetId, budgets)"
+                    :transactions="transactionsWithDesignations"
+                    :loading="false"
                     @trips-identified="handleTripsIdentified"
+                    @trips-reset="resetTrips"
+                    @transaction-updated="handleTransactionUpdated"
                   />
                 </div>
               </div>
@@ -164,8 +177,21 @@ import {
   findBudgetById,
   tokenUtils,
   storageUtils,
-  errorUtils
+  errorUtils,
+  sortingUtils
 } from './utils/transactions';
+
+// Import transaction designation utilities
+import {
+  addHashtagsToTransactions,
+  processTransactionsWithTrips,
+  getTripSummaries
+} from './utils/designator';
+
+// Import trip-specific functions from the new trips utility
+import {
+  DEFAULT_TRIP_SETTINGS
+} from './utils/trips';
 
 // Import our config for YNAB
 import config from './config.json';
@@ -173,7 +199,7 @@ import config from './config.json';
 // Import Our Components to Compose Our App
 import Nav from './components/Nav.vue';
 import Footer from './components/Footer.vue';
-import Budgets from './components/Budgets.vue';
+import Budget from './components/Budget.vue';
 import Transactions from './components/Transactions.vue';
 import CombinedTransactions from './components/CombinedTransactions.vue';
 import TripSummary from './components/TripSummary.vue';
@@ -196,14 +222,22 @@ export default {
       sinceDate: "2024-01-01",
       leftBudgetId: null,
       leftTransactions: [],
+      leftTotal: 0,
+      leftBudgetLoading: false, // Track left budget loading state
       rightBudgetId: null,
       rightTransactions: [],
+      rightTotal: 0,
+      rightBudgetLoading: false, // Track right budget loading state
       budgets: [],
-      // Data for trip summary
+      // New combined data model
+      combinedTransactions: [], // All transactions with designations
+      processedTransactions: [], // Transactions with trip/transfer/household tags
       tripSummaryData: {
         trips: [],
         transactionsWithTrips: 0
       },
+      // Add manual trip processing control
+      manualTripProcessingEnabled: false,
     }
   },
   // When this component is created, check whether we need to get a token,
@@ -215,22 +249,106 @@ export default {
     if (this.ynab.token) {
       this.api = initializeYnabApi(this.ynab.token);
 
-      // Load saved budget IDs from localStorage
-      const savedLeftBudgetId = storageUtils.getSavedBudgetId('left');
-      const savedRightBudgetId = storageUtils.getSavedBudgetId('right');
-
-      // Get budgets first
+      // Get budgets first, then load saved budget IDs
       this.getBudgets();
+    }
+  },
+  computed: {
+    // Combined transactions from both budgets
+    allTransactions() {
+      const combined = [
+        ...this.leftTransactions.map(t => ({ ...t, source: 'left' })),
+        ...this.rightTransactions.map(t => ({ ...t, source: 'right' }))
+      ];
 
-      // Set a timeout to allow budgets to load before selecting
-      setTimeout(() => {
-        if (savedLeftBudgetId) {
-          this.selectLeftBudget(savedLeftBudgetId);
+      // Use centralized sorting utility from transactions.js
+      return sortingUtils.sortNewestFirst(combined);
+    },
+
+    // Transactions with designations (transfer, household, trips)
+    transactionsWithDesignations() {
+      // Only process designations when both budgets are selected and have completed loading
+      if (this.allTransactions.length === 0) return [];
+
+      // Check if both budgets are selected
+      const bothBudgetsSelected = this.leftBudgetId && this.rightBudgetId;
+      const bothBudgetsLoaded = !this.leftBudgetLoading && !this.rightBudgetLoading;
+
+      if (!bothBudgetsSelected || !bothBudgetsLoaded) {
+        console.log('Waiting for both budgets to be selected and fully loaded before processing designations');
+
+        // Return transactions without designations
+        return this.allTransactions.map(transaction => ({
+          ...transaction,
+          hashtags: [],
+          relevantHashtags: [],
+          hasTripTag: false,
+          hasHouseholdTag: false,
+          hasTransferTag: false,
+          tripName: null,
+          budgetName: transaction.source === 'left'
+            ? this.selectedBudget(this.leftBudgetId, this.budgets)?.name || 'Left Budget'
+            : this.selectedBudget(this.rightBudgetId, this.budgets)?.name || 'Right Budget'
+        }));
+      }
+
+      console.log('Processing', this.allTransactions.length, 'transactions');
+
+      // Add automatic hashtags and process transactions
+      const transactionsWithHashtags = addHashtagsToTransactions(this.allTransactions);
+      console.log('After hashtag processing:', transactionsWithHashtags.length, 'transactions');
+
+      // Automatically process trips when both budgets are loaded
+      const processedForTrips = processTransactionsWithTrips(transactionsWithHashtags);
+      console.log('After trip processing:', processedForTrips.length, 'transactions');
+
+      // Add budget names to the processed transactions
+      return processedForTrips.map(transaction => ({
+        ...transaction,
+        budgetName: transaction.source === 'left'
+          ? this.selectedBudget(this.leftBudgetId, this.budgets)?.name || 'Left Budget'
+          : this.selectedBudget(this.rightBudgetId, this.budgets)?.name || 'Right Budget'
+      }));
+    },
+
+    // Filtered transaction lists for summary components
+    transferTransactions() {
+      const transfers = this.transactionsWithDesignations.filter(t => t.hasTransferTag);
+      console.log('Transfer transactions:', transfers.length);
+      return transfers;
+    },
+
+    householdTransactions() {
+      const household = this.transactionsWithDesignations.filter(t => t.hasHouseholdTag);
+      console.log('Household transactions for component:', household.length);
+      if (household.length > 0) {
+        console.log('Sample household transaction:', household[0]);
+      }
+      return household;
+    },
+
+    tripTransactions() {
+      const trips = this.transactionsWithDesignations.filter(t => t.tripName);
+      console.log('Trip transactions:', trips.length);
+      return trips;
+    }
+  },
+  watch: {
+    // Watch for changes in combined transactions to update trip summaries
+    transactionsWithDesignations: {
+      handler(newTransactions) {
+        if (newTransactions.length > 0) {
+          // Update trip summary data automatically
+          const trips = getTripSummaries(newTransactions);
+          const transactionsWithTrips = newTransactions.filter(t => t.tripName).length;
+
+          this.tripSummaryData = {
+            trips,
+            transactionsWithTrips
+          };
         }
-        if (savedRightBudgetId) {
-          this.selectRightBudget(savedRightBudgetId);
-        }
-      }, 1000);
+      },
+      immediate: true
     }
   },
   methods: {
@@ -249,6 +367,19 @@ export default {
       this.error = null;
       try {
         this.budgets = await getBudgets(this.api);
+
+        // After budgets are loaded, restore saved budget IDs
+        const savedLeftBudgetId = storageUtils.getSavedBudgetId('left');
+        const savedRightBudgetId = storageUtils.getSavedBudgetId('right');
+
+        if (savedLeftBudgetId) {
+          console.log('Restoring saved left budget ID:', savedLeftBudgetId);
+          this.leftBudgetId = savedLeftBudgetId;
+        }
+        if (savedRightBudgetId) {
+          console.log('Restoring saved right budget ID:', savedRightBudgetId);
+          this.rightBudgetId = savedRightBudgetId;
+        }
       } catch (err) {
         console.error('Error fetching budgets:', err);
         // Check if this is an authentication error
@@ -260,61 +391,6 @@ export default {
           // For other errors, keep the token but show the error
           this.error = errorUtils.getErrorMessage(err);
         }
-      } finally {
-        this.loading = false;
-      }
-    },
-    // This selects a budget and gets all the transactions in that budget
-    async selectRightBudget(id) {
-      console.log('Selecting right budget:', id);
-      this.loading = true;
-      this.error = null;
-      this.rightBudgetId = id;
-      this.rightTransactions = [];
-
-      // Save budget ID to localStorage
-      storageUtils.saveBudgetId('right', id);
-
-      if (!id) {
-        this.loading = false;
-        return;
-      }
-
-      try {
-        this.rightTransactions = await getEnhancedTransactions(this.api, id, this.sinceDate);
-      } catch (err) {
-        console.error('Error fetching right transactions:', err);
-        this.error = errorUtils.getErrorMessage(err);
-        // Don't reset the token, just clear the current budget selection
-        storageUtils.saveBudgetId('right', null);
-        this.rightBudgetId = null;
-      } finally {
-        this.loading = false;
-      }
-    },
-    async selectLeftBudget(id) {
-      console.log('Selecting left budget:', id);
-      this.loading = true;
-      this.error = null;
-      this.leftBudgetId = id;
-      this.leftTransactions = [];
-
-      // Save budget ID to localStorage
-      storageUtils.saveBudgetId('left', id);
-
-      if (!id) {
-        this.loading = false;
-        return;
-      }
-
-      try {
-        this.leftTransactions = await getEnhancedTransactions(this.api, id, this.sinceDate);
-      } catch (err) {
-        console.error('Error fetching left transactions:', err);
-        this.error = errorUtils.getErrorMessage(err);
-        // Don't reset the token, just clear the current budget selection
-        storageUtils.saveBudgetId('left', null);
-        this.leftBudgetId = null;
       } finally {
         this.loading = false;
       }
@@ -348,6 +424,10 @@ export default {
       storageUtils.clearBudgetIds();
       this.leftBudgetId = null;
       this.rightBudgetId = null;
+      this.leftTransactions = [];
+      this.rightTransactions = [];
+      this.leftTotal = 0;
+      this.rightTotal = 0;
       this.error = null;
       console.log('Application reset complete');
     },
@@ -370,31 +450,124 @@ export default {
         return process.env.VUE_APP_REDIRECT_URI;
       }
 
-
       // Fall back to default config value
       console.log('Using default redirect URI from config:', config.redirectUri);
       return config.redirectUri;
-      },
-
-    // Handler for trips-identified event from CombinedTransactions
-    handleTripsIdentified(data) {
-      console.log('Trips identified:', data.trips.length);
-      this.tripSummaryData = data;
     },
 
-    // Method to trigger trip identification from parent
+    // Handler for trips-identified event from CombinedTransactions
+    handleTripsIdentified() {
+      console.log('Manual trip identification triggered');
+      // Enable manual trip processing
+      this.manualTripProcessingEnabled = true;
+
+      // Force reactive update of transactionsWithDesignations
+      this.$nextTick(() => {
+        // Update trip summary data
+        const trips = getTripSummaries(this.transactionsWithDesignations);
+        const transactionsWithTrips = this.transactionsWithDesignations.filter(t => t.tripName).length;
+
+        this.tripSummaryData = {
+          trips,
+          transactionsWithTrips
+        };
+
+        console.log('Trip identification complete:', trips.length, 'trips found');
+      });
+    },
+
+    // Method to trigger trip identification manually
     identifyTrips() {
-      // Trigger the trip identification process in the CombinedTransactions component
-      if (this.$refs.combinedTransactions) {
-        this.$refs.combinedTransactions.triggerTripIdentification();
+      console.log('Triggering manual trip identification');
+      this.handleTripsIdentified();
+    },
+
+    // Method to reset trips
+    resetTrips() {
+      console.log('Resetting trips');
+      this.manualTripProcessingEnabled = false;
+
+      // Clear trip summary data
+      this.tripSummaryData = {
+        trips: [],
+        transactionsWithTrips: 0
+      };
+
+      // Automatically trigger trip identification after reset
+      this.$nextTick(() => {
+        console.log('Auto-triggering trip identification after reset');
+        this.handleTripsIdentified();
+      });
+    },
+    handleLeftBudgetSelected(budgetId) {
+      this.leftBudgetId = budgetId;
+    },
+    handleRightBudgetSelected(budgetId) {
+      this.rightBudgetId = budgetId;
+    },
+    handleTransactionsLoaded({ budgetType, transactions, total }) {
+      console.log(`Transactions loaded for ${budgetType} budget:`, transactions.length);
+
+      if (budgetType === 'left') {
+        this.leftTransactions = transactions;
+        this.leftTotal = total;
+      } else if (budgetType === 'right') {
+        this.rightTransactions = transactions;
+        this.rightTotal = total;
       }
-    }
+    },
+    handleBudgetError({ budgetType, error }) {
+      console.error(`Error for ${budgetType} budget:`, error);
+      this.error = `Error loading ${budgetType} budget: ${error}`;
+    },
+    handleBudgetLoadingChanged({ budgetType, loading }) {
+      console.log(`Budget loading changed - ${budgetType} budget:`, loading);
+
+      if (budgetType === 'left') {
+        this.leftBudgetLoading = loading;
+      } else if (budgetType === 'right') {
+        this.rightBudgetLoading = loading;
+      }
+    },
+
+    // New method to handle transaction updates from components
+    handleTransactionUpdated(updatedTransaction) {
+      console.log('Transaction updated:', updatedTransaction);
+
+      // Find and update the transaction in the appropriate array
+      if (updatedTransaction.source === 'left') {
+        const index = this.leftTransactions.findIndex(t => t.id === updatedTransaction.id);
+        if (index !== -1) {
+          this.leftTransactions.splice(index, 1, updatedTransaction);
+        }
+      } else if (updatedTransaction.source === 'right') {
+        const index = this.rightTransactions.findIndex(t => t.id === updatedTransaction.id);
+        if (index !== -1) {
+          this.rightTransactions.splice(index, 1, updatedTransaction);
+        }
+      }
+
+      // The computed properties will automatically update
+    },
+
+    // Method to update trip summaries when needed
+    updateTripSummaries() {
+      if (this.transactionsWithDesignations.length > 0) {
+        const trips = getTripSummaries(this.transactionsWithDesignations);
+        const transactionsWithTrips = this.transactionsWithDesignations.filter(t => t.tripName).length;
+
+        this.tripSummaryData = {
+          trips,
+          transactionsWithTrips
+        };
+      }
+    },
   },
   // Specify which components we want to make available to our templates
   components: {
     Nav,
     Footer,
-    Budgets,
+    Budget,
     Transactions,
     CombinedTransactions,
     TripSummary,

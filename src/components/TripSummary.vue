@@ -32,8 +32,8 @@
                 <th>Trip</th>
                 <th>Start Date</th>
                 <th>End Date</th>
-                <th>Duration</th>
                 <th>Transactions</th>
+                <th>Frequent Words</th>
                 <th class="text-end">Total Spending</th>
               </tr>
             </thead>
@@ -47,8 +47,15 @@
                 </td>
                 <td>{{ formatDate(trip.startDate) }}</td>
                 <td>{{ formatDate(trip.endDate) }}</td>
-                <td>{{ calculateDuration(trip.startDate, trip.endDate) }}</td>
                 <td>{{ trip.transactionCount }}</td>
+                <td>
+                  <span v-if="trip.frequentWords && trip.frequentWords.length"
+                        class="frequent-words"
+                        :title="'Most frequent words from payee and memo fields: ' + trip.frequentWords.join(', ')">
+                    {{ trip.frequentWords.join(', ') }}
+                  </span>
+                  <span v-else class="text-muted">—</span>
+                </td>
                 <td class="text-end text-danger">{{ formatCurrency(trip.totalSpending) }}</td>
               </tr>
             </tbody>
@@ -91,13 +98,6 @@ export default {
       const date = new Date(dateString);
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     },
-    calculateDuration(startDate, endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      const diffTime = Math.abs(end - start);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return `${diffDays} day${diffDays !== 1 ? 's' : ''}`;
-    },
     formatCurrency(milliunits) {
       if (milliunits === undefined || milliunits === null) {
         return '$0.00';
@@ -136,5 +136,16 @@ export default {
 .card-header {
   padding: 0.75rem 1.25rem;
   background-color: rgba(0,0,0,0.03);
+}
+
+.frequent-words {
+  font-size: 0.9rem;
+  color: #6c757d;
+  font-style: italic;
+  max-width: 200px;
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

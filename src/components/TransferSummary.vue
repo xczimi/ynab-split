@@ -81,11 +81,11 @@
 export default {
   name: 'TransferSummary',
   props: {
-    leftTransactions: {
+    transactions: {
       type: Array,
       default: () => []
     },
-    rightTransactions: {
+    allTransactions: {
       type: Array,
       default: () => []
     },
@@ -100,41 +100,24 @@ export default {
   },
   data() {
     return {
-      showDetails: true
+      showDetails: false
     };
   },
   computed: {
-    allTransactions() {
-      // Combine transactions with source information
-      const leftWithSource = this.leftTransactions.map(t => ({
-        ...t,
-        source: 'left',
-        budgetName: this.selectedLeftBudget?.name || 'Left Budget'
-      }));
-
-      const rightWithSource = this.rightTransactions.map(t => ({
-        ...t,
-        source: 'right',
-        budgetName: this.selectedRightBudget?.name || 'Right Budget'
-      }));
-
-      return [...leftWithSource, ...rightWithSource];
-    },
-
     transferPairs() {
-      if (!this.allTransactions.length) return [];
+      if (!this.transactions.length) return [];
 
       const pairs = [];
       const processedTransactions = new Set();
 
-      this.allTransactions.forEach(transaction => {
+      this.transactions.forEach(transaction => {
         // Skip if already processed
         if (processedTransactions.has(transaction.id)) return;
 
         const transactionDate = new Date(transaction.date);
         const transactionAmount = Math.abs(transaction.amount);
 
-        // Look for matching transactions
+        // Look for matching transactions in all transactions
         const matchingTransactions = this.allTransactions.filter(otherTransaction => {
           if (otherTransaction.id === transaction.id) return false;
           if (otherTransaction.source === transaction.source) return false;
@@ -154,12 +137,20 @@ export default {
 
             const daysDifference = Math.abs(new Date(fromTransaction.date) - new Date(toTransaction.date)) / (1000 * 60 * 60 * 24);
 
+            // Get budget names
+            const fromBudget = fromTransaction.source === 'left'
+              ? this.selectedLeftBudget?.name || 'Left Budget'
+              : this.selectedRightBudget?.name || 'Right Budget';
+            const toBudget = toTransaction.source === 'left'
+              ? this.selectedLeftBudget?.name || 'Left Budget'
+              : this.selectedRightBudget?.name || 'Right Budget';
+
             pairs.push({
               id: `${fromTransaction.id}-${toTransaction.id}`,
               fromTransaction,
               toTransaction,
-              fromBudget: fromTransaction.budgetName,
-              toBudget: toTransaction.budgetName,
+              fromBudget,
+              toBudget,
               amount: Math.abs(fromTransaction.amount),
               daysDifference: Math.round(daysDifference)
             });
@@ -181,7 +172,7 @@ export default {
     },
 
     totalTransferTransactions() {
-      return this.transferPairs.length * 2; // Each pair represents 2 transactions
+      return this.transactions.length;
     }
   },
   methods: {
