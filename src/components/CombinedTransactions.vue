@@ -40,6 +40,18 @@
             Trips
           </label>
         </div>
+        <div class="form-check form-switch me-3">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="showUndesignated"
+            v-model="showUndesignated"
+          >
+          <label class="form-check-label" for="showUndesignated">
+            <i class="fas fa-question-circle me-1"></i>
+            Undesignated
+          </label>
+        </div>
 
         <!-- Reset Trips Button -->
         <div class="d-flex align-items-center me-3">
@@ -179,6 +191,7 @@ export default {
       showTransfers: false,
       showHousehold: false,
       showTrips: false,
+      showUndesignated: false, // New toggle for undesignated transactions
       selectedTripFilter: '' // Trip filter dropdown
     };
   },
@@ -200,7 +213,20 @@ export default {
 
     filteredTransactions() {
       const filtered = this.combinedTransactions.filter(transaction => {
-        // Check if transaction should be shown based on filters
+        // Determine if transaction has any designation
+        const hasDesignation = transaction.hasTransferTag || transaction.hasHouseholdTag || transaction.tripName;
+
+        // If showing undesignated, only show transactions without designations
+        if (this.showUndesignated && !hasDesignation) {
+          return true;
+        }
+
+        // If not showing undesignated, exclude undesignated transactions
+        if (!this.showUndesignated && !hasDesignation) {
+          return false;
+        }
+
+        // For designated transactions, apply specific filters
         if (transaction.hasTransferTag && !this.showTransfers) {
           return false;
         }
@@ -215,6 +241,7 @@ export default {
         if (this.selectedTripFilter && transaction.tripName !== this.selectedTripFilter) {
           return false;
         }
+
         return true;
       });
 
