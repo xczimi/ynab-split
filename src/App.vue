@@ -67,6 +67,7 @@
                 @transactions-loaded="handleTransactionsLoaded"
                 @budget-error="handleBudgetError"
                 @budget-loading-changed="handleBudgetLoadingChanged"
+                @color-selected="handleBudgetColorSelected"
               />
             </div>
             <div class="col-md-6">
@@ -81,6 +82,7 @@
                 @transactions-loaded="handleTransactionsLoaded"
                 @budget-error="handleBudgetError"
                 @budget-loading-changed="handleBudgetLoadingChanged"
+                @color-selected="handleBudgetColorSelected"
               />
             </div>
           </div>
@@ -238,6 +240,11 @@ export default {
       },
       // Add manual trip processing control
       manualTripProcessingEnabled: false,
+      // Budget color management
+      budgetColors: {
+        left: 'bg-primary',
+        right: 'bg-success'
+      }
     }
   },
   // When this component is created, check whether we need to get a token,
@@ -252,6 +259,13 @@ export default {
       // Get budgets first, then load saved budget IDs
       this.getBudgets();
     }
+
+    // Load saved budget colors on startup
+    this.loadSavedBudgetColors();
+  },
+  mounted() {
+    // Apply initial budget colors to CSS variables
+    this.updateBudgetColorVariables();
   },
   computed: {
     // Combined transactions from both budgets
@@ -561,6 +575,48 @@ export default {
           transactionsWithTrips
         };
       }
+    },
+
+    // Handle budget color selection from Budget components
+    handleBudgetColorSelected({ budgetType, color }) {
+      console.log(`Budget color selected for ${budgetType}:`, color);
+
+      // Update local budget colors
+      this.budgetColors[budgetType] = color;
+
+      // Update CSS variables immediately for visual feedback
+      this.updateBudgetColorVariables();
+    },
+
+    // New methods to load and save budget colors
+    loadSavedBudgetColors() {
+      const savedLeftColor = localStorage.getItem('budget_color_left');
+      const savedRightColor = localStorage.getItem('budget_color_right');
+
+      if (savedLeftColor) {
+        this.budgetColors.left = savedLeftColor;
+      }
+      if (savedRightColor) {
+        this.budgetColors.right = savedRightColor;
+      }
+    },
+    updateBudgetColorVariables() {
+      // Convert Bootstrap classes to actual colors for CSS variables
+      const colorMap = {
+        'bg-success': '#198754',
+        'bg-danger': '#dc3545',
+        'bg-warning': '#ffc107',
+        'bg-info': '#0dcaf0',
+        'bg-primary': '#0d6efd',
+        'bg-secondary': '#6c757d'
+      };
+
+      const leftColor = colorMap[this.budgetColors.left] || '#0d6efd';
+      const rightColor = colorMap[this.budgetColors.right] || '#198754';
+
+      // Set CSS variables for budget colors
+      document.documentElement.style.setProperty('--budget-left-color', leftColor);
+      document.documentElement.style.setProperty('--budget-right-color', rightColor);
     },
   },
   // Specify which components we want to make available to our templates

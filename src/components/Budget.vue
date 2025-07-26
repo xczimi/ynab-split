@@ -1,9 +1,34 @@
 <template>
-  <div class="card text-white mb-3 shadow h-100" :class="budgetColor" style="width: 100%;">
+  <div class="card text-white mb-3 shadow h-100" :class="selectedBudgetColor" style="width: 100%;">
     <div class="card-header d-flex justify-content-between align-items-center">
       <span>{{ selectedBudget(budgetId, budgets)?.name }}</span>
-      <div v-if="loading" class="spinner-border spinner-border-sm text-light" role="status">
-        <span class="visually-hidden">Loading...</span>
+      <div class="d-flex align-items-center">
+        <!-- Color Selector Dropdown -->
+        <div v-if="budgetId" class="dropdown me-2">
+          <button class="btn btn-sm btn-outline-light dropdown-toggle"
+                  type="button"
+                  id="colorDropdown"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                  title="Select budget color">
+            <i class="fas fa-palette me-1"></i>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="colorDropdown">
+            <li v-for="color in availableColors" :key="color.value">
+              <a class="dropdown-item d-flex align-items-center"
+                 href="#"
+                 @click.prevent="selectColor(color.value)"
+                 :class="{ 'active': selectedColor === color.value }">
+                <span class="color-preview me-2" :class="color.class"></span>
+                {{ color.name }}
+                <i v-if="selectedColor === color.value" class="fas fa-check ms-auto"></i>
+              </a>
+            </li>
+          </ul>
+        </div>
+        <div v-if="loading" class="spinner-border spinner-border-sm text-light" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
       </div>
     </div>
     <div v-if="!budgetId" class="budgets container p-3">
@@ -94,12 +119,36 @@ export default {
     return {
       transactions: [],
       loading: false,
-      error: null
+      error: null,
+      selectedColorValue: null, // Add reactive property for selected color
+      availableColors: [
+        { value: 'bg-success', name: 'Green', class: 'bg-success' },
+        { value: 'bg-danger', name: 'Red', class: 'bg-danger' },
+        { value: 'bg-warning', name: 'Yellow', class: 'bg-warning' },
+        { value: 'bg-info', name: 'Blue', class: 'bg-info' },
+        { value: 'bg-primary', name: 'Indigo', class: 'bg-primary' },
+        { value: 'bg-secondary', name: 'Gray', class: 'bg-secondary' }
+      ]
     };
+  },
+  mounted() {
+    // Load saved color on component mount
+    this.loadSavedColor();
   },
   computed: {
     total() {
       return transactionsTotal(this.transactions);
+    },
+    selectedColor() {
+      // Use reactive data property instead of reading localStorage directly
+      return this.selectedColorValue || (this.budgetType === 'left' ? 'bg-primary' : 'bg-success');
+    },
+    selectedBudgetColor() {
+      // When no budget is selected, show default blue
+      if (!this.budgetId) {
+        return 'bg-primary';
+      }
+      return this.selectedColor;
     },
     budgetColor() {
       // When no budget is selected, show blue
@@ -198,6 +247,27 @@ export default {
           loading: false
         });
       }
+    },
+    selectColor(color) {
+      // Save color to localStorage
+      localStorage.setItem(`budget_color_${this.budgetType}`, color);
+
+      // Update reactive data property
+      this.selectedColorValue = color;
+
+      // Emit color change to parent with budget type
+      this.$emit('color-selected', {
+        budgetType: this.budgetType,
+        color: color
+      });
+    },
+
+    // Add method to load saved color
+    loadSavedColor() {
+      const savedColor = localStorage.getItem(`budget_color_${this.budgetType}`);
+      if (savedColor) {
+        this.selectedColorValue = savedColor;
+      }
     }
   }
 }
@@ -250,5 +320,13 @@ export default {
 /* Ensure text remains readable on custom backgrounds */
 .bg-budget-left, .bg-budget-right {
   color: white !important;
+}
+
+/* Color preview styles for dropdown */
+.color-preview {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.25rem;
+  display: inline-block;
 }
 </style>
