@@ -61,7 +61,19 @@ Raw YNAB Transactions (Orange flagged)
 - Transaction amounts in **milliunits** (1000 = $1.00), negative = expense
 - State in App.vue, utility functions for logic, components for display
 - Budget colors stored in localStorage, OAuth tokens in sessionStorage
-- Transfer detection: matching amounts within 3 days across budgets
+
+### Detection Thresholds
+
+- **Transfer detection:** Matching absolute amounts within **3 days** across different budgets
+- **Trip grouping:** Consecutive transactions within **2-day gaps**, requires **2+ unique dates**
+- **Household detection:** Category or category group name contains "bill"
+
+### Designation System
+
+Transactions are categorized via hashtags in the memo field:
+- `#transfer` - Auto-tagged when matching amounts found across budgets
+- `#household` - Auto-tagged for bill categories, or manual
+- `#trip` / `#tripName` - Manual (e.g., `#tripHawaii`) or auto-generated (`trip2024Jan15`)
 
 ### Configuration
 
@@ -70,3 +82,7 @@ OAuth credentials in `src/config.json`. Supports `VUE_APP_REDIRECT_URI` env var 
 ## Testing
 
 Tests are in `src/utils/designator.test.js` covering hashtag extraction, transfer detection, and trip identification. Run with `npm test`.
+
+## Documentation
+
+See `docs/features.md` for detailed user-facing documentation on transfers, trips, household expenses, and the designation system.
