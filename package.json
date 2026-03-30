@@ -9,6 +9,7 @@
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "check": "npm test && npm run build",
     "start": "VUE_APP_REDIRECT_URI=http://localhost:8080 webpack-dev-server --mode development --open --hot",
     "build": "webpack --mode production --progress"
   },
