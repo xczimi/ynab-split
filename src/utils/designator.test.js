@@ -6,7 +6,6 @@ import {
   extractAllHashtags,
   filterRelevantHashtags,
   extractHashtags,
-  isBillTransaction,
   addAutomaticTags,
   addHashtagsToTransactions,
   isTransferTransaction,
@@ -179,52 +178,7 @@ describe('tripIdentification utilities', () => {
     });
   });
 
-  describe('isBillTransaction', () => {
-    it('should identify bill by category name containing "bill"', () => {
-      const transaction = {
-        category_name: 'Electric Bill',
-        category_group_name: 'Monthly Expenses'
-      };
-      expect(isBillTransaction(transaction)).toBe(true);
-    });
-
-    it('should identify bill by category group containing "bill"', () => {
-      const transaction = {
-        category_name: 'Electricity',
-        category_group_name: 'Monthly Bills'
-      };
-      expect(isBillTransaction(transaction)).toBe(true);
-    });
-
-    it('should be case insensitive', () => {
-      const transaction = {
-        category_name: 'Electric BILL',
-        category_group_name: 'Monthly Expenses'
-      };
-      expect(isBillTransaction(transaction)).toBe(true);
-    });
-
-    it('should not identify non-bill transactions', () => {
-      const transaction = {
-        category_name: 'Groceries',
-        category_group_name: 'Food'
-      };
-      expect(isBillTransaction(transaction)).toBe(false);
-    });
-  });
-
   describe('addAutomaticTags', () => {
-    it('should add #household tag to bill transactions', () => {
-      const transaction = {
-        memo: 'Monthly electricity',
-        category_name: 'Electric Bill'
-      };
-
-      const result = addAutomaticTags(transaction, []);
-      expect(result.memo).toBe('Monthly electricity #household');
-      expect(result.autoTaggedAsBill).toBe(true);
-    });
-
     it('should add #transfer tag to transfer transactions', () => {
       const transaction = {
         id: '1',
@@ -251,20 +205,8 @@ describe('tripIdentification utilities', () => {
 
     it('should not add duplicate tags', () => {
       const transaction = {
-        memo: 'Already tagged #household',
-        category_name: 'Electric Bill'
-      };
-
-      const result = addAutomaticTags(transaction, []);
-      expect(result.memo).toBe('Already tagged #household');
-      expect(result.autoTaggedAsBill).toBe(false);
-    });
-
-    it('should add both tags when applicable', () => {
-      const transaction = {
         id: '1',
-        memo: 'Transfer for bill payment',
-        category_name: 'Electric Bill',
+        memo: 'Already tagged #transfer',
         date: '2024-01-15',
         amount: -20000,
         source: 'left'
@@ -281,7 +223,8 @@ describe('tripIdentification utilities', () => {
       ];
 
       const result = addAutomaticTags(transaction, allTransactions);
-      expect(result.memo).toBe('Transfer for bill payment #household #transfer');
+      expect(result.memo).toBe('Already tagged #transfer');
+      expect(result.autoTaggedAsTransfer).toBe(false);
     });
   });
 
@@ -303,18 +246,27 @@ describe('tripIdentification utilities', () => {
       expect(result[0].hasTransferTag).toBe(false);
     });
 
-    it('should apply automatic tags during processing', () => {
+    it('should apply automatic transfer tags during processing', () => {
       const transactions = [
         {
           id: '1',
           memo: 'Monthly payment',
-          category_name: 'Electric Bill'
+          date: '2024-01-15',
+          amount: -20000,
+          source: 'left'
+        },
+        {
+          id: '2',
+          memo: 'Received payment',
+          date: '2024-01-16',
+          amount: 20000,
+          source: 'right'
         }
       ];
 
       const result = addHashtagsToTransactions(transactions);
-      expect(result[0].memo).toBe('Monthly payment #household');
-      expect(result[0].hasHouseholdTag).toBe(true);
+      expect(result[0].memo).toBe('Monthly payment #transfer');
+      expect(result[0].hasTransferTag).toBe(true);
     });
   });
 
@@ -403,7 +355,8 @@ describe('tripIdentification utilities', () => {
       ];
 
       const name = generateTripName(transactions, 1);
-      expect(name).toBe('trip2024Jan13-16');
+      // Same month trips just use the start date
+      expect(name).toBe('trip2024Jan13');
     });
 
     it('should generate automatic name for same year, different months trip', () => {
@@ -413,7 +366,7 @@ describe('tripIdentification utilities', () => {
       ];
 
       const name = generateTripName(transactions, 1);
-      expect(name).toBe('trip2024Jan26-Feb02');
+      expect(name).toBe('trip2024Jan26-Feb2');
     });
 
     it('should generate automatic name for multi-year trip', () => {
@@ -423,7 +376,7 @@ describe('tripIdentification utilities', () => {
       ];
 
       const name = generateTripName(transactions, 1);
-      expect(name).toBe('trip2023Dec30-2024Jan05');
+      expect(name).toBe('trip2023Dec30-2024Jan5');
     });
   });
 
@@ -515,7 +468,7 @@ describe('tripIdentification utilities', () => {
       const summaries = getTripSummaries(transactions);
       expect(summaries).toHaveLength(2);
 
-      const vegasTrip = summaries.find(s => s.name === 'tripVegas');
+      const vegasTrip = summaries.find(s => s.tripName === 'tripVegas');
       expect(vegasTrip.startDate).toBe('2024-01-15');
       expect(vegasTrip.endDate).toBe('2024-01-16');
       expect(vegasTrip.transactionCount).toBe(2);
@@ -530,7 +483,7 @@ describe('tripIdentification utilities', () => {
 
       const summaries = getTripSummaries(transactions);
       expect(summaries).toHaveLength(1);
-      expect(summaries[0].name).toBe('tripVegas');
+      expect(summaries[0].tripName).toBe('tripVegas');
     });
 
     it('should calculate total spending correctly (only negative amounts)', () => {

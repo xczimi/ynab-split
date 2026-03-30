@@ -217,7 +217,9 @@ export default {
       storageUtils.saveBudgetId(this.budgetType, budgetId);
 
       try {
-        this.transactions = await getEnhancedTransactions(this.api, budgetId, this.sinceDate);
+        const transactions = await getEnhancedTransactions(this.api, budgetId, this.sinceDate);
+
+        this.transactions = transactions;
         console.log(`${this.budgetType} transactions loaded:`, this.transactions.length);
 
         // Emit transactions to parent

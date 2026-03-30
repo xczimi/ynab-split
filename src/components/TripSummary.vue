@@ -38,26 +38,45 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="trip in sortedTrips" :key="trip.name" class="trip-row">
-                <td>
-                  <span class="badge bg-primary me-1">
-                    #{{ trip.name }}
-                    <i class="fas fa-hashtag ms-1" title="Trip identified by hashtag"></i>
-                  </span>
-                </td>
-                <td>{{ formatDate(trip.startDate) }}</td>
-                <td>{{ formatDate(trip.endDate) }}</td>
-                <td>{{ trip.transactionCount }}</td>
-                <td>
-                  <span v-if="trip.frequentWords && trip.frequentWords.length"
-                        class="frequent-words"
-                        :title="'Most frequent words from payee and memo fields: ' + trip.frequentWords.join(', ')">
-                    {{ trip.frequentWords.join(', ') }}
-                  </span>
-                  <span v-else class="text-muted">—</span>
-                </td>
-                <td class="text-end text-danger">{{ formatCurrency(trip.totalSpending) }}</td>
-              </tr>
+              <template v-for="trip in sortedTrips" :key="trip.tripName">
+                <tr class="trip-row" @click="toggleTrip(trip.tripName)" style="cursor: pointer;">
+                  <td>
+                    <i :class="expandedTrips[trip.tripName] ? 'fas fa-chevron-down' : 'fas fa-chevron-right'" class="me-2 text-muted"></i>
+                    <span class="badge bg-primary me-1">
+                      #{{ trip.tripName }}
+                    </span>
+                  </td>
+                  <td>{{ formatDate(trip.startDate) }}</td>
+                  <td>{{ formatDate(trip.endDate) }}</td>
+                  <td>{{ trip.transactionCount }}</td>
+                  <td>
+                    <span v-if="trip.frequentWords && trip.frequentWords.length"
+                          class="frequent-words"
+                          :title="'Most frequent words from payee and memo fields: ' + trip.frequentWords.join(', ')">
+                      {{ trip.frequentWords.join(', ') }}
+                    </span>
+                    <span v-else class="text-muted">—</span>
+                  </td>
+                  <td class="text-end text-danger">{{ formatCurrency(trip.totalSpending) }}</td>
+                </tr>
+                <!-- Category breakdown row -->
+                <tr v-if="expandedTrips[trip.tripName] && trip.categoryBreakdown" class="category-breakdown">
+                  <td colspan="6" class="p-0">
+                    <div class="bg-light p-3">
+                      <h6 class="mb-2 text-muted">Spending by Category</h6>
+                      <div class="row">
+                        <div v-for="[category, data] in trip.categoryBreakdown" :key="category" class="col-md-4 col-sm-6 mb-2">
+                          <div class="d-flex justify-content-between align-items-center">
+                            <span class="category-name">{{ category }}</span>
+                            <span class="category-amount text-danger">{{ formatCurrency(data.amount) }}</span>
+                          </div>
+                          <small class="text-muted">{{ data.count }} transaction{{ data.count !== 1 ? 's' : '' }}</small>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </template>
             </tbody>
           </table>
         </div>
@@ -81,7 +100,8 @@ export default {
   },
   data() {
     return {
-      showDetails: true
+      showDetails: true,
+      expandedTrips: {}
     };
   },
   computed: {
@@ -93,6 +113,9 @@ export default {
   methods: {
     toggleDetails() {
       this.showDetails = !this.showDetails;
+    },
+    toggleTrip(tripName) {
+      this.expandedTrips[tripName] = !this.expandedTrips[tripName];
     },
     formatDate(dateString) {
       const date = new Date(dateString);
@@ -147,5 +170,19 @@ export default {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.category-breakdown {
+  background-color: #f8f9fa;
+}
+
+.category-name {
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.category-amount {
+  font-weight: 600;
+  font-size: 0.9rem;
 }
 </style>
