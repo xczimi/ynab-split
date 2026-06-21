@@ -59,6 +59,17 @@
           </div>
         </div>
 
+        <div class="mb-3">
+          <label class="form-label small text-light-emphasis mb-1">Person name</label>
+          <input
+            type="text"
+            class="form-control form-control-sm"
+            v-model="personName"
+            @change="onPersonNameChanged"
+            :placeholder="selectedBudget(budgetId, budgets)?.name"
+          />
+        </div>
+
         <div class="d-flex justify-content-between align-items-center">
           <button class="btn btn-sm btn-outline-light" @click="handleBudgetSelect(null, $event)">
             <i class="fas fa-exchange-alt me-1"></i> Change Budget
@@ -85,6 +96,7 @@ import {
   storageUtils,
   errorUtils
 } from '../utils/transactions';
+import { loadPersonNames, savePersonNames } from '../utils/designations/config.js';
 
 export default {
   name: "Budget",
@@ -120,6 +132,7 @@ export default {
       transactions: [],
       loading: false,
       error: null,
+      personName: '',
       selectedColorValue: null, // Add reactive property for selected color
       availableColors: [
         { value: 'bg-success', name: 'Green', class: 'bg-success' },
@@ -134,6 +147,7 @@ export default {
   mounted() {
     // Load saved color on component mount
     this.loadSavedColor();
+    this.personName = loadPersonNames()[this.budgetType]?.name || '';
   },
   computed: {
     total() {
@@ -270,6 +284,12 @@ export default {
       if (savedColor) {
         this.selectedColorValue = savedColor;
       }
+    },
+    onPersonNameChanged() {
+      const all = loadPersonNames();
+      const updated = { ...all, [this.budgetType]: { name: this.personName } };
+      savePersonNames(updated);
+      this.$emit('person-name-changed', { budgetType: this.budgetType, name: this.personName });
     }
   }
 }
