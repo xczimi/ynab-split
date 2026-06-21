@@ -64,9 +64,13 @@ Why this beats reasoning about group-level windows:
 - **Transfer-cleared, oldest-first:** cumulative clearings pay down the oldest
   outstanding accruals first. A transaction's computed **`settled`** flag is true
   once the running total of clearings has reached past it.
-- There is **always an open tail** = the most recent unsettled accruals, which
-  sum to the **current net = "Owes $X."** That permanent tail is the standing
-  balance — a feature, not a bug.
+- There is **always an open tail** = the most recent unsettled accruals. That
+  permanent tail is the standing balance — a feature, not a bug.
+
+> **Phase-0 spike correction (see §9).** On the real fixture, bidirectional
+> accruals mean the open tail does **not** telescope to the exact net. The exact
+> net stays `computeSettlement().net`; the open-tail total is reconciled to it
+> with an explicit **residual line**, not by assuming they are equal.
 
 ### Group aggregation
 
@@ -133,6 +137,40 @@ grouped model:
   or earmarked for one specific trip, it still clears the oldest open balance.
   Accepted fuzziness, consistent with the "auto, don't overthink it" choice.
 - **Bidirectional netting needs care.** Accruals push the balance both ways, so
-  "cumulative accrued position" is not strictly monotonic. The oldest-first rule
-  must be defined and **tested against real fixture data** so we can eyeball which
-  transactions and groups it marks settled before trusting it in the UI.
+  "cumulative accrued position" is not strictly monotonic. ✅ **Resolved by the
+  Phase-0 spike — see §9.**
+- **Follow-up (deferred):** a non-blocking **"mark your side of transfers"
+  warning** — detect a likely one-sided transfer leg (single-sided amount with no
+  cross-budget match, or a known settle-up payee) and nudge the user to tag it
+  `#transfer`. Out of scope for this branch (it touches transfer detection, which
+  §7 walls off); captured here so it is not lost.
+
+## 9. Phase-0 spike resolution (settlement watermark)
+
+The build's first act was a spike computing the oldest-first watermark over the
+161-transaction fixture. It surfaced a genuine fork (the §8 bidirectional risk),
+resolved by interview. Decisions, now locked:
+
+1. **Authoritative net.** `computeSettlement().net` (the exact net over *all*
+   transactions, accruals + clearings) is the single source of truth and what the
+   budget card shows. On the fixture this is **+$286.15** (right owes left).
+2. **Reconciliation by residual line, literal §3.** `settled` stays a
+   **per-transaction, oldest-first** flag; a **group is settled iff every
+   transaction in it is settled**. The open tail is the set of unsettled
+   transactions; on the fixture its total (~$503) does **not** equal the net, so
+   the grouped view shows an explicit **residual line** (~−$217) that closes the
+   open-tail total to the exact `computeSettlement().net`. The gap is made
+   visible, not hidden.
+3. **Exact rule (A1).** Sort accruals oldest → newest by their **signed
+   contribution** (`transactionContribution`); maintain a running cumulative
+   accrued total; a transaction is `settled` once cumulative-accrued (including
+   itself) ≤ the **clearing pool** = −Σ(clearing contributions). Direction-aware
+   (works whichever way the net points). Because accruals are bidirectional the
+   flag can be non-contiguous (a late negative accrual can dip the running total
+   back under the pool — 2 such cases in the fixture); **accepted**, consistent
+   with §8 "accepted fuzziness." Clearings (`#transfer`, transfer-exempt) form the
+   pool, belong to **no group**, and are treated as always-settled.
+4. **Untagged transactions are just transactions.** A row not recognized as a
+   transfer is a normal accrual regardless of inflow/outflow sign (e.g. an
+   empty-memo `"Carey"` inflow is income/refund-like, contributing negatively). No
+   retag, no special-casing — honors §7. Any cleanup is the deferred warning above.

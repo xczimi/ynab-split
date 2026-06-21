@@ -24,34 +24,31 @@ through it last. The source of intent for every layer is `docs/funded-groups.md`
 
 ```
 /goal Act as TEAM LEADER orchestrating the Funded Groups settlement view as a
-sequential build pipeline. The design is ALREADY settled — docs/funded-groups.md
-is the source of intent (reached via /grill-me). Stay coherent with this repo's
-prior feature cycles by leaning on the superpowers plugin skills at every phase;
-do not freelance a bespoke process.
+sequential build pipeline. The design is settled — docs/funded-groups.md is the
+source of intent (via /grill-me). Lean on the superpowers plugin skills at every
+phase; do not freelance a bespoke process.
 
-PIPELINE (one branch, built in DEPENDENCY ORDER — each layer gates the next):
-  1. settlement-engine — per-transaction `settled` flag via cumulative,
-     oldest-first transfer clearing on the flat timeline.
-     Files: src/utils/designations/settlement.js (+ tests).
-  2. grouping — partition `settled`-flagged txns into trips + non-trip calendar
-     quarters; aggregate to per-group net + settled/partial/open.
-     Files: new module under src/utils/designations/ (e.g. groups.js) (+ tests).
+PIPELINE (one branch feature/funded-groups, in DEPENDENCY ORDER — each gates the next):
+  1. settlement-engine — per-txn `settled` flag via cumulative, oldest-first
+     transfer clearing on the flat timeline. Files: src/utils/designations/settlement.js (+ tests).
+  2. grouping — partition `settled` txns into trips + non-trip calendar quarters;
+     aggregate to per-group net + settled/partial/open. Files: new module under
+     src/utils/designations/ (e.g. groups.js) (+ tests).
   3. grouped-view — replace the single Owes/Owed presentation with the grouped
      view. Files: new component(s) + App.vue / Budget.vue wiring.
-  Build them SEQUENTIALLY (2 needs 1, 3 needs 2). Use
-  superpowers:dispatching-parallel-agents ONLY for genuinely independent
-  sub-work inside a layer (e.g. a pure helper alongside its own test).
+  Build SEQUENTIALLY (2 needs 1, 3 needs 2). Use
+  superpowers:dispatching-parallel-agents ONLY for genuinely independent sub-work
+  inside a layer (e.g. a pure helper alongside its own test).
 
-PHASE 0 — LOCK THE DESIGN (mostly done — do NOT re-brainstorm):
-  - The design is settled in docs/funded-groups.md. Do not re-open settled
-    decisions. Two open flags remain in §8.
+PHASE 0 — LOCK THE DESIGN (do NOT re-brainstorm):
+  - Design is settled in docs/funded-groups.md. Don't re-open it. Two open flags
+    remain in §8.
   - FIRST coding act is a SPIKE: compute the oldest-first watermark over the
-    161-transaction fixture (test/fixtures/sample-transactions.json) and eyeball
-    which transactions/groups it marks settled. If the bidirectional / never-zero
-    data reveals a genuine fork, run /grill-me to resolve it with ME before
-    building further. Otherwise proceed.
-  - Use superpowers:writing-plans to turn docs/funded-groups.md §6 into one
-    implementation plan spanning all three layers.
+    161-txn fixture (test/fixtures/sample-transactions.json) and eyeball which
+    txns/groups it marks settled. If the bidirectional / never-zero data reveals a
+    genuine fork, run /grill-me to resolve it with ME first. Otherwise proceed.
+  - Use superpowers:writing-plans to turn docs/funded-groups.md §6 into one plan
+    spanning all three layers.
 
 PHASE 1 — BUILD THE PIPELINE:
   - superpowers:using-git-worktrees: build on an isolated worktree off ONE branch
@@ -60,37 +57,34 @@ PHASE 1 — BUILD THE PIPELINE:
     executing-plans — one focused agent per layer, in dependency order.
   - Every layer uses superpowers:test-driven-development (red-green-refactor)
     against the real fixture, and superpowers:systematic-debugging on any failure.
-  - Per-layer bar: `npm run check` green (Jest + build); coverage stays at/above
-    80% statements/functions/lines and 65% branches (`npm test -- --coverage`);
-    immutable updates only (never mutate); America/Vancouver via Luxon; amounts in
-    milliunits; NO console.log; many small files.
-  - VERIFICATION IS LEAN BY HOUSE PREFERENCE: prove engine/grouping correctness
-    with Jest integration tests over the fixture; for the view, bring it up with
-    `npm start` (localhost:8080) and inspect via window.ynabDebug. Do NOT add
-    Playwright/CDP/headless-browser tooling. Verify the rendered view visually,
-    not just green checks.
+  - Per-layer bar: `npm run check` green (Jest + build); coverage stays ≥80%
+    statements/functions/lines and 65% branches (`npm test -- --coverage`);
+    immutable updates only; America/Vancouver via Luxon; milliunits; NO
+    console.log; many small files.
+  - LEAN VERIFICATION (house preference): prove engine/grouping with Jest fixture
+    tests; for the view, bring it up with `npm start` (localhost:8080) and inspect
+    via window.ynabDebug. Do NOT add Playwright/CDP/headless tooling. Verify the
+    rendered view visually, not just green checks.
   - Close each layer with superpowers:requesting-code-review +
-    verification-before-completion before calling it done.
+    verification-before-completion.
 
 PHASE 2 — INTEGRATE & READY FOR REVIEW (the deliverable):
-  - It is one branch, so "integration" is the green tip of feature/funded-groups
-    with all three layers landed. Re-verify the WHOLE branch: `npm run check` +
+  - One branch, so "integration" is the green tip of feature/funded-groups with
+    all three layers landed. Re-verify the WHOLE branch: `npm run check` +
     coverage, then a manual pass through the grouped view in `npm start`.
-  - Reconciliation check: the grouped view's open-tail total MUST agree with the
-    existing budget-card Owes/Owed number. If they disagree, that's a bug — debug
-    before declaring done.
+  - Reconciliation: the grouped view's open-tail total MUST agree with the
+    budget-card Owes/Owed number. If they disagree, it's a bug — debug first.
   - Use superpowers:finishing-a-development-branch to tee up the hand-back.
 
 COMPLETION BAR — stop here, hand back to me:
   DONE when feature/funded-groups has all three layers, is verified green as a
-  whole (check + coverage), and the grouped view is clickable locally via
-  `npm start`. Then STOP and surface the branch + a per-layer summary for my
-  FINAL REVIEW. Do NOT push to main — pushing main auto-deploys via GitHub
-  Actions. Do NOT merge. Those are my calls after review.
+  whole (check + coverage), and the grouped view is clickable via `npm start`.
+  Then STOP and surface the branch + a per-layer summary for my FINAL REVIEW. Do
+  NOT push to main (auto-deploys). Do NOT merge. My calls.
 
-Throughout: surface a question to me only when a choice is genuinely mine (the §8
-open flags are the likely ones; the up-front spike should catch them). Otherwise
-keep working across turns until the completion bar is met.
+Throughout: surface a question only when a choice is genuinely mine (the §8 open
+flags are likely; the spike should catch them). Otherwise keep working until the
+completion bar is met.
 ```
 
 ---
