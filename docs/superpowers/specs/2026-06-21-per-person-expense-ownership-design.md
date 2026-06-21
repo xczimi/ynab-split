@@ -161,8 +161,10 @@ renaming a person does not orphan category assignments.
 ## 8. Edge Cases & Decisions
 
 - **Conflicting explicit tags** (both `#peter` and `#carey` in one memo):
-  contradictory → resolve to `shared` and emit a `console.debug` note. (Explicit
-  single tag or `#shared` always wins over the category map.)
+  contradictory → resolve to `shared` (with `reason: 'conflicting owner tags'`).
+  No console output — the repo's no-console rule applies; the `reason` field
+  carries the signal instead. (Explicit single tag or `#shared` always wins over
+  the category map; `#shared` wins even over a conflicting pair.)
 - **`#shared` override:** lets a transaction in an owned category be forced back
   to shared without removing the category mapping.
 - **Person name empty / collides** (both sides resolve to the same slug):
