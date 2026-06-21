@@ -1,4 +1,4 @@
-import { shareOfNonPayer, transactionContribution, computeSettlement, isClearing, clearingPool, markSettled } from './settlement.js';
+import { shareOfNonPayer, transactionContribution, computeSettlement, isClearing, clearingPool, markSettled, settlementWatermark } from './settlement.js';
 
 const tx = (over = {}) => ({ date: '2024-01-01', source: 'left', amount: -400000, ownerSide: 'shared', ...over });
 
@@ -131,5 +131,20 @@ describe('markSettled (oldest-first A1 rule)', () => {
       { date: '2024-02-01', source: 'right', amount: -200000, ownerSide: 'shared', hasTransferTag: false },
     ];
     expect(markSettled(offsetting).every(t => t.settled)).toBe(true);
+  });
+});
+
+describe('settlementWatermark', () => {
+  const accr = (date) => ({ date, source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false });
+  const clearing = { date: '2024-01-15', source: 'right', amount: -300000, ownerSide: 'shared', hasTransferTag: true };
+
+  it('residual closes open tail to the exact net', () => {
+    const txns = [accr('2024-01-01'), accr('2024-02-01'), accr('2024-03-01'), clearing];
+    const w = settlementWatermark(txns);
+    expect(w.net).toBe(150000);
+    expect(w.clearingPool).toBe(150000);
+    expect(w.openTailTotal).toBe(200000);            // two unsettled +100000 accruals
+    expect(w.residual).toBe(w.net - w.openTailTotal); // -50000
+    expect(w.openTailTotal + w.residual).toBe(w.net); // invariant
   });
 });

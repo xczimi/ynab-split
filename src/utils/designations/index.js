@@ -62,7 +62,15 @@ export { detectCustomCategory, detectAllCustomCategories } from './rules/categor
 export { detectOwner } from './rules/ownerRule.js';
 
 // Settlement utilities
-export { shareOfNonPayer, transactionContribution, computeSettlement } from './settlement.js';
+export {
+  shareOfNonPayer,
+  transactionContribution,
+  computeSettlement,
+  isClearing,
+  clearingPool,
+  markSettled,
+  settlementWatermark,
+} from './settlement.js';
 
 // Individual rule modules (for advanced usage)
 export * as transferRule from './rules/transferRule.js';

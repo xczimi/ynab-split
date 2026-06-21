@@ -95,6 +95,29 @@ export function markSettled(transactions = [], options = {}) {
 }
 
 /**
+ * Full settlement watermark summary for the grouped view.
+ * @param {Array} transactions
+ * @param {{leftName?:string, rightName?:string}} options
+ * @returns {{transactions:Array, net:number, clearingPool:number, openTailTotal:number, residual:number}}
+ *   openTailTotal = Σ contribution over UNSETTLED accruals (the visible open tail).
+ *   residual = net - openTailTotal (the explicit reconciliation line; see §9).
+ */
+export function settlementWatermark(transactions = [], options = {}) {
+  const marked = markSettled(transactions, options);
+  const net = computeSettlement(transactions, options).net;
+  const openTailTotal = marked
+    .filter(t => !isClearing(t) && !t.settled)
+    .reduce((sum, t) => sum + t.contribution, 0);
+  return {
+    transactions: marked,
+    net,
+    clearingPool: clearingPool(transactions),
+    openTailTotal,
+    residual: net - openTailTotal,
+  };
+}
+
+/**
  * Compute the settlement net, direction, and running series.
  * @param {Array} transactions  each requires .date, .source, .amount, .ownerSide
  * @param {{leftName?:string, rightName?:string}} options
