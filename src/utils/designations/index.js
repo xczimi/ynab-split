@@ -72,6 +72,9 @@ export {
   settlementWatermark,
 } from './settlement.js';
 
+// Funded Groups (grouping + reconciliation)
+export { quarterKey, groupKeyFor, buildGroups, summarizeGroups } from './groups.js';
+
 // Individual rule modules (for advanced usage)
 export * as transferRule from './rules/transferRule.js';
 export * as tripRule from './rules/tripRule.js';

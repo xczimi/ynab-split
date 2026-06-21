@@ -1,4 +1,4 @@
-import { quarterKey, groupKeyFor, buildGroups } from './groups.js';
+import { quarterKey, groupKeyFor, buildGroups, summarizeGroups } from './groups.js';
 
 describe('quarterKey (America/Vancouver)', () => {
   it('maps months to quarters', () => {
@@ -54,5 +54,17 @@ describe('buildGroups', () => {
   it('sorts groups oldest-first by startDate', () => {
     const groups = buildGroups([a({ date: '2025-09-01' }), a({ date: '2025-01-01' })]);
     expect(groups[0].startDate <= groups[1].startDate).toBe(true);
+  });
+});
+
+describe('summarizeGroups', () => {
+  it('returns groups plus reconciliation numbers', () => {
+    const accr = (date) => ({ date, source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false, tripName: null });
+    const clearing = { date: '2024-01-15', source: 'right', amount: -300000, ownerSide: 'shared', hasTransferTag: true };
+    const s = summarizeGroups([accr('2024-01-01'), accr('2024-02-01'), accr('2024-03-01'), clearing]);
+    expect(s.net).toBe(150000);
+    expect(s.openTailTotal + s.residual).toBe(s.net);
+    expect(Array.isArray(s.groups)).toBe(true);
+    expect(s.groups.every(g => g.kind === 'quarter')).toBe(true); // none trip-tagged
   });
 });
