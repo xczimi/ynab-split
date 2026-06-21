@@ -1,4 +1,4 @@
-import { shareOfNonPayer, transactionContribution, computeSettlement } from './settlement.js';
+import { shareOfNonPayer, transactionContribution, computeSettlement, isClearing, clearingPool } from './settlement.js';
 
 const tx = (over = {}) => ({ date: '2024-01-01', source: 'left', amount: -400000, ownerSide: 'shared', ...over });
 
@@ -63,4 +63,26 @@ describe('computeSettlement', () => {
   it('empty input -> zero net', () => {
     expect(computeSettlement([]).net).toBe(0);
   });
+});
+
+describe('isClearing', () => {
+  it('true only when transfer-tagged', () => {
+    expect(isClearing({ hasTransferTag: true })).toBe(true);
+    expect(isClearing({ hasTransferTag: false })).toBe(false);
+    expect(isClearing({})).toBe(false);
+  });
+});
+
+describe('clearingPool', () => {
+  it('is the negated sum of clearing contributions (positive when net positive)', () => {
+    // one clearing paying the balance down by 150000
+    const clearing = { source: 'right', amount: -300000, ownerSide: 'shared', hasTransferTag: true };
+    // contribution = (-1) * (300000) * 0.5 = -150000 ; pool = +150000
+    expect(clearingPool([clearing])).toBe(150000);
+  });
+  it('ignores accruals', () => {
+    const accrual = { source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false };
+    expect(clearingPool([accrual])).toBe(0);
+  });
+  it('empty -> 0', () => expect(clearingPool([])).toBe(0));
 });

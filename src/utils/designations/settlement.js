@@ -30,6 +30,30 @@ export function transactionContribution(transaction) {
 }
 
 /**
+ * A transaction is a "clearing" (settle-up) iff it carries the transfer tag.
+ * Clearings are transfer-exempt: they fund the clearing pool and belong to no group.
+ * @param {Object} transaction
+ * @returns {boolean}
+ */
+export function isClearing(transaction) {
+  return Boolean(transaction.hasTransferTag);
+}
+
+/**
+ * The clearing pool: total settle-up magnitude in the net's direction (milliunits).
+ * = -Σ(contribution) over clearings. Clearings pay the balance down, so they sum
+ * negative when the net is positive; negating yields a positive pool magnitude.
+ * @param {Array} transactions
+ * @returns {number}
+ */
+export function clearingPool(transactions = []) {
+  const sum = transactions
+    .filter(isClearing)
+    .reduce((acc, t) => acc + transactionContribution(t), 0);
+  return sum === 0 ? 0 : -sum;
+}
+
+/**
  * Compute the settlement net, direction, and running series.
  * @param {Array} transactions  each requires .date, .source, .amount, .ownerSide
  * @param {{leftName?:string, rightName?:string}} options
