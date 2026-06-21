@@ -9,6 +9,8 @@ import { shouldAutoTag as shouldAutoTagTransfer, isTransferTransaction } from '.
 import { shouldAutoTag as shouldAutoTagHousehold } from './rules/householdRule.js';
 import { processTrips } from './rules/tripRule.js';
 import { detectCustomCategory } from './rules/categoryRule.js';
+import { detectOwner } from './rules/ownerRule.js';
+import { loadPersonNames, loadCategoryOwners } from './config.js';
 
 /**
  * Add automatic tags to a single transaction
@@ -55,11 +57,18 @@ export function addAutomaticTags(transaction, allTransactions, config = defaultC
 /**
  * Add hashtag information to a single transaction
  * @param {Object} transaction - Transaction with auto-tags applied
- * @returns {Object} Transaction with hashtag arrays and boolean flags
+ * @param {Object} ownership - Ownership config with personNames and categoryOwners
+ * @returns {Object} Transaction with hashtag arrays, boolean flags, and ownerSide
  */
-export function enrichWithHashtagInfo(transaction) {
+export function enrichWithHashtagInfo(transaction, ownership = { personNames: { left: { name: '' }, right: { name: '' } }, categoryOwners: {} }) {
   const allHashtags = extractAllHashtags(transaction);
   const relevantHashtags = filterRelevantHashtags(allHashtags);
+  const hasTransferTag = relevantHashtags.some(tag => tag.toLowerCase() === 'transfer');
+
+  // Transfers are settle-ups, not ownable expenses.
+  const owner = hasTransferTag
+    ? { ownerSide: 'shared', reason: 'transfer-exempt' }
+    : detectOwner(transaction, ownership);
 
   return {
     ...transaction,
@@ -67,7 +76,9 @@ export function enrichWithHashtagInfo(transaction) {
     relevantHashtags,
     hasTripTag: relevantHashtags.some(tag => tag.toLowerCase().startsWith('trip')),
     hasHouseholdTag: relevantHashtags.some(tag => tag.toLowerCase() === 'household'),
-    hasTransferTag: relevantHashtags.some(tag => tag.toLowerCase() === 'transfer'),
+    hasTransferTag,
+    ownerSide: owner.ownerSide,
+    ownerReason: owner.reason,
   };
 }
 
@@ -75,8 +86,8 @@ export function enrichWithHashtagInfo(transaction) {
  * Process all transactions with automatic tagging and hashtag extraction
  * This is the main entry point matching the old addHashtagsToTransactions signature
  * @param {Array} transactions - Array of transactions to process
- * @param {Object} userConfig - Optional configuration overrides
- * @returns {Array} Transactions with hashtag info and auto-tags
+ * @param {Object} userConfig - Optional configuration overrides (may include userConfig.ownership)
+ * @returns {Array} Transactions with hashtag info, auto-tags, and ownerSide
  */
 export function addHashtagsToTransactions(transactions, userConfig = {}) {
   const config = mergeConfig(userConfig);
@@ -84,12 +95,18 @@ export function addHashtagsToTransactions(transactions, userConfig = {}) {
   // Load custom designation rules from localStorage
   const customRules = loadCustomDesignations();
 
+  // Ownership config: explicit override (tests/App) or load from localStorage.
+  const ownership = userConfig.ownership || {
+    personNames: loadPersonNames(),
+    categoryOwners: loadCategoryOwners(),
+  };
+
   return transactions.map(transaction => {
     // First apply automatic tags (including custom rules)
     const withAutoTags = addAutomaticTags(transaction, transactions, config, customRules);
 
-    // Then extract and add hashtag info
-    return enrichWithHashtagInfo(withAutoTags);
+    // Then extract and add hashtag + ownership info
+    return enrichWithHashtagInfo(withAutoTags, ownership);
   });
 }
 
