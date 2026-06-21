@@ -148,12 +148,17 @@ function getSummary() {
 
   const tripNames = [...new Set(trips.map(t => t.tripName))];
 
+  const ownedLeft = transactions.filter(t => t.ownerSide === 'left').length;
+  const ownedRight = transactions.filter(t => t.ownerSide === 'right').length;
+  const ownedShared = transactions.filter(t => (t.ownerSide || 'shared') === 'shared').length;
+
   return {
     total: transactions.length,
     transfers: transfers.length,
     household: household.length,
     trips: trips.length,
     undesignated: undesignated.length,
+    ownership: { left: ownedLeft, right: ownedRight, shared: ownedShared },
     tripNames
   };
 }
