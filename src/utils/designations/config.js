@@ -43,6 +43,9 @@ export function mergeConfig(userConfig = {}) {
     household: { ...defaultConfig.household, ...userConfig.household },
     trip: { ...defaultConfig.trip, ...userConfig.trip },
     timezone: userConfig.timezone || defaultConfig.timezone,
+    // Optional reactive passthrough: user-selected household category IDs.
+    // When undefined, householdRule falls back to localStorage.
+    householdCategoryIds: userConfig.householdCategoryIds,
   };
 }
 

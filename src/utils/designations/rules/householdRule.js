@@ -12,8 +12,10 @@ import { defaultConfig, loadHouseholdCategoryIds } from '../config.js';
  * @returns {Object} Detection result { matches, reason }
  */
 export function detect(transaction, config = defaultConfig) {
-  // First check: Category ID-based matching (user selections)
-  const householdCategoryIds = loadHouseholdCategoryIds();
+  // First check: Category ID-based matching (user selections).
+  // Prefer IDs threaded through config (reactive) and fall back to localStorage
+  // for callers that don't pass them. Note: an explicit [] disables id-matching.
+  const householdCategoryIds = config.householdCategoryIds || loadHouseholdCategoryIds();
   if (transaction.category_id && householdCategoryIds.includes(transaction.category_id)) {
     return {
       matches: true,

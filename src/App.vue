@@ -61,6 +61,7 @@
                 :budgetId="leftBudgetId"
                 budgetType="left"
                 :otherTotal="rightTotal"
+                :settlementNet="settlementNet"
                 :api="api"
                 :sinceDate="sinceDate"
                 @budget-selected="handleLeftBudgetSelected"
@@ -77,6 +78,7 @@
                 :budgetId="rightBudgetId"
                 budgetType="right"
                 :otherTotal="leftTotal"
+                :settlementNet="settlementNet"
                 :api="api"
                 :sinceDate="sinceDate"
                 @budget-selected="handleRightBudgetSelected"
@@ -238,7 +240,8 @@ import {
 } from './utils/designator';
 
 // Import config helpers for ownership persistence
-import { loadPersonNames, loadCategoryOwners } from './utils/designations/config.js';
+import { loadPersonNames, loadCategoryOwners, loadHouseholdCategoryIds } from './utils/designations/config.js';
+import { computeSettlement } from './utils/designations/index.js';
 
 // Import trip-specific functions from the new trips utility
 import {
@@ -304,6 +307,7 @@ export default {
       // Ownership state
       personNames: { left: { name: '' }, right: { name: '' } },
       categoryOwners: {},
+      householdCategoryIds: [],
     }
   },
   // When this component is created, check whether we need to get a token,
@@ -323,6 +327,7 @@ export default {
     this.loadSavedBudgetColors();
     this.personNames = loadPersonNames();
     this.categoryOwners = loadCategoryOwners();
+    this.householdCategoryIds = loadHouseholdCategoryIds();
   },
   mounted() {
     // Apply initial budget colors to CSS variables
@@ -375,6 +380,7 @@ export default {
       // Add automatic hashtags and process transactions
       const transactionsWithHashtags = addHashtagsToTransactions(this.allTransactions, {
         ownership: { personNames: this.personNames, categoryOwners: this.categoryOwners },
+        householdCategoryIds: this.householdCategoryIds,
       });
       console.log('After hashtag processing:', transactionsWithHashtags.length, 'transactions');
 
@@ -409,6 +415,14 @@ export default {
         left: this.personNames.left?.name || this.selectedBudget(this.leftBudgetId, this.budgets)?.name || 'Left',
         right: this.personNames.right?.name || this.selectedBudget(this.rightBudgetId, this.budgets)?.name || 'Right',
       };
+    },
+
+    // Single ownership-aware settlement figure (positive = right owes left)
+    settlementNet() {
+      return computeSettlement(this.transactionsWithDesignations, {
+        leftName: this.personDisplayNames.left,
+        rightName: this.personDisplayNames.right,
+      }).net;
     },
 
     budgetColorHex() {
@@ -624,11 +638,10 @@ export default {
     },
 
     handleHouseholdCategoriesChanged(categoryIds) {
-      console.log('Household categories changed:', categoryIds.length, 'categories selected');
-      // Force re-processing of transactions by triggering reactivity
-      // The transactionsWithDesignations computed property will automatically
-      // re-process with the new household category IDs from localStorage
-      this.$forceUpdate();
+      // Reactive update: reassign so transactionsWithDesignations recomputes with
+      // the new household category IDs (a previous $forceUpdate could not invalidate
+      // the cached computed, since the IDs were read non-reactively from localStorage).
+      this.householdCategoryIds = [...categoryIds];
     },
 
     // New method to handle transaction updates from components

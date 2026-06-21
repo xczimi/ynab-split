@@ -52,10 +52,10 @@
         </span>
       </div>
       <div class="card-text">
-        <div class="alert mb-4" :class="{'alert-info': otherTotal > total, 'alert-success': otherTotal <= total}">
+        <div class="alert mb-4" :class="{'alert-info': isOwed, 'alert-success': !isOwed}">
           <div class="d-flex justify-content-between">
-            <strong>{{ otherTotal > total ? "Owed" : "Owes" }}</strong>
-            <span class="text-end">{{ formatCurrency(Math.abs((otherTotal - total) / 2)) }}</span>
+            <strong>{{ isOwed ? "Owed" : "Owes" }}</strong>
+            <span class="text-end">{{ formatCurrency(settlementAmount) }}</span>
           </div>
         </div>
 
@@ -125,6 +125,11 @@ export default {
     sinceDate: {
       type: String,
       default: "2024-01-01"
+    },
+    // Ownership-aware settlement net (milliunits; positive = right owes left)
+    settlementNet: {
+      type: Number,
+      default: 0
     }
   },
   data() {
@@ -152,6 +157,14 @@ export default {
   computed: {
     total() {
       return transactionsTotal(this.transactions);
+    },
+    // This side is "Owed" when the net settlement points toward it.
+    // settlementNet > 0 means the right person owes the left person.
+    isOwed() {
+      return this.budgetType === 'left' ? this.settlementNet > 0 : this.settlementNet < 0;
+    },
+    settlementAmount() {
+      return Math.abs(this.settlementNet);
     },
     selectedColor() {
       // Use reactive data property instead of reading localStorage directly
