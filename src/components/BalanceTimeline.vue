@@ -3,8 +3,8 @@
     <div class="card-header bg-light d-flex justify-content-between align-items-center">
       <h5 class="mb-0">Balance Timeline</h5>
       <div class="d-flex align-items-center">
-        <span class="badge bg-info me-3" title="Current settlement balance">
-          {{ formatCurrency(currentBalance) }}
+        <span class="badge bg-info me-3" title="Current settlement">
+          {{ settlementLabel }}
         </span>
         <button
           @click="toggleDetails"
@@ -29,6 +29,7 @@
 <script>
 import { Chart, registerables } from 'chart.js';
 import annotationPlugin from 'chartjs-plugin-annotation';
+import { computeSettlement } from '../utils/designations/settlement.js';
 Chart.register(...registerables, annotationPlugin);
 
 // Color palette for trip regions
@@ -80,23 +81,19 @@ export default {
         return a.date.localeCompare(b.date);
       });
     },
-    chartData() {
-      let runningBalance = 0;
-      const dataPoints = [];
-
-      this.sortedTransactions.forEach(t => {
-        runningBalance += (t.source === 'left' ? t.amount : -t.amount);
-        dataPoints.push({
-          date: t.date,
-          balance: runningBalance / 2  // Settlement amount
-        });
+    settlement() {
+      return computeSettlement(this.transactions, {
+        leftName: this.leftBudgetName,
+        rightName: this.rightBudgetName,
       });
-
-      return dataPoints;
     },
     currentBalance() {
-      if (this.chartData.length === 0) return 0;
-      return this.chartData[this.chartData.length - 1].balance;
+      return this.settlement.net;
+    },
+    settlementLabel() {
+      const d = this.settlement.direction;
+      if (!d.amount) return 'Settled up';
+      return `${d.from} owes ${d.to} ${this.formatCurrency(d.amount)}`;
     },
     tripRegions() {
       // Group transactions by tripName to find date ranges
@@ -158,7 +155,7 @@ export default {
       }
 
       const ctx = canvas.getContext('2d');
-      const data = this.chartData;
+      const data = this.settlement.series;
 
       // Get unique dates and aggregate balances by date
       const dateBalances = {};
