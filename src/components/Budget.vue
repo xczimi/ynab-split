@@ -76,7 +76,12 @@
           </button>
 
           <div class="text-end">
-            <div class="small text-light-emphasis mb-1">Transactions</div>
+            <div class="small text-light-emphasis mb-1">
+              Transactions
+              <span class="d-block" title="Only transactions on or after this date are loaded">
+                since {{ formattedSinceDate }}
+              </span>
+            </div>
             <span class="badge rounded-pill bg-light text-dark">
               {{ transactions.length }}
             </span>
@@ -97,6 +102,7 @@ import {
   errorUtils
 } from '../utils/transactions';
 import { loadPersonNames, savePersonNames } from '../utils/designations/config.js';
+import { DateTime } from 'luxon';
 
 export default {
   name: "Budget",
@@ -157,6 +163,11 @@ export default {
   computed: {
     total() {
       return transactionsTotal(this.transactions);
+    },
+    // Human-readable form of the (non-configurable) sinceDate filter, shown next to the count
+    formattedSinceDate() {
+      const dt = DateTime.fromISO(this.sinceDate);
+      return dt.isValid ? dt.toFormat('MMM d, yyyy') : this.sinceDate;
     },
     // This side is "Owed" when the net settlement points toward it.
     // settlementNet > 0 means the right person owes the left person.
