@@ -15,6 +15,8 @@ import {
   processTransactions,
   isTransferTransaction,
   computeSettlement,
+  markSettled,
+  settlementWatermark,
 } from '../src/utils/designations/index.js';
 
 import {
@@ -331,5 +333,29 @@ describe('ownership end-to-end', () => {
     const legacy = shared.reduce((r, t) => r + (t.source === 'left' ? t.amount : -t.amount), 0) / 2;
     const { net } = computeSettlement(shared);
     expect(Math.abs(net)).toBe(Math.abs(legacy));
+  });
+});
+
+describe('settlement watermark over the real fixture', () => {
+  const processed = processTransactions(sampleTransactions, {
+    ownership: { personNames: { left: { name: 'Left' }, right: { name: 'Right' } }, categoryOwners: {} },
+  });
+
+  it('marks 114 of 145 accruals settled (31 open-tail)', () => {
+    const marked = markSettled(processed);
+    const accruals = marked.filter(t => !t.hasTransferTag);
+    expect(accruals.length).toBe(145);
+    expect(accruals.filter(t => t.settled).length).toBe(114);
+    expect(accruals.filter(t => !t.settled).length).toBe(31);
+  });
+
+  it('reconciles open tail + residual to the exact net', () => {
+    const w = settlementWatermark(processed);
+    expect(w.net).toBe(286155);
+    expect(w.clearingPool).toBe(9067400);
+    expect(w.openTailTotal).toBe(503660);
+    expect(w.residual).toBe(-217505);
+    expect(w.openTailTotal + w.residual).toBe(w.net);
+    expect(w.net).toBe(computeSettlement(processed).net);
   });
 });
