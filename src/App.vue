@@ -68,6 +68,7 @@
                 @budget-error="handleBudgetError"
                 @budget-loading-changed="handleBudgetLoadingChanged"
                 @color-selected="handleBudgetColorSelected"
+                @person-name-changed="handlePersonNameChanged"
               />
             </div>
             <div class="col-md-6">
@@ -83,6 +84,7 @@
                 @budget-error="handleBudgetError"
                 @budget-loading-changed="handleBudgetLoadingChanged"
                 @color-selected="handleBudgetColorSelected"
+                @person-name-changed="handlePersonNameChanged"
               />
             </div>
           </div>
@@ -131,7 +133,10 @@
                   :transactions="transactionsWithDesignations"
                   :leftColor="budgetColorHex.left"
                   :rightColor="budgetColorHex.right"
+                  :leftName="personDisplayNames.left"
+                  :rightName="personDisplayNames.right"
                   @categories-changed="handleHouseholdCategoriesChanged"
+                  @owners-changed="handleCategoryOwnersChanged"
                 />
               </div>
             </div>
@@ -155,8 +160,8 @@
                   :transactions="transactionsWithDesignations"
                   :leftColor="budgetColorHex.left"
                   :rightColor="budgetColorHex.right"
-                  :leftBudgetName="selectedBudget(leftBudgetId, budgets)?.name || 'Left Budget'"
-                  :rightBudgetName="selectedBudget(rightBudgetId, budgets)?.name || 'Right Budget'"
+                  :leftBudgetName="personDisplayNames.left"
+                  :rightBudgetName="personDisplayNames.right"
                 />
               </div>
             </div>
@@ -173,6 +178,8 @@
                     ref="combinedTransactions"
                     :transactions="transactionsWithDesignations"
                     :loading="false"
+                    :leftName="personDisplayNames.left"
+                    :rightName="personDisplayNames.right"
                     @trips-identified="handleTripsIdentified"
                     @trips-reset="resetTrips"
                     @transaction-updated="handleTransactionUpdated"
@@ -229,6 +236,9 @@ import {
   processTransactionsWithTrips,
   getTripSummaries
 } from './utils/designator';
+
+// Import config helpers for ownership persistence
+import { loadPersonNames, loadCategoryOwners } from './utils/designations/config.js';
 
 // Import trip-specific functions from the new trips utility
 import {
@@ -290,7 +300,10 @@ export default {
         right: 'bg-success'
       },
       // Active view tab
-      activeTab: 'trips' // 'joint' or 'trips' - default to trips since it works with 1 budget
+      activeTab: 'trips', // 'joint' or 'trips' - default to trips since it works with 1 budget
+      // Ownership state
+      personNames: { left: { name: '' }, right: { name: '' } },
+      categoryOwners: {},
     }
   },
   // When this component is created, check whether we need to get a token,
@@ -308,6 +321,8 @@ export default {
 
     // Load saved budget colors on startup
     this.loadSavedBudgetColors();
+    this.personNames = loadPersonNames();
+    this.categoryOwners = loadCategoryOwners();
   },
   mounted() {
     // Apply initial budget colors to CSS variables
@@ -358,7 +373,9 @@ export default {
       console.log('Processing', this.allTransactions.length, 'transactions');
 
       // Add automatic hashtags and process transactions
-      const transactionsWithHashtags = addHashtagsToTransactions(this.allTransactions);
+      const transactionsWithHashtags = addHashtagsToTransactions(this.allTransactions, {
+        ownership: { personNames: this.personNames, categoryOwners: this.categoryOwners },
+      });
       console.log('After hashtag processing:', transactionsWithHashtags.length, 'transactions');
 
       // Automatically process trips when both budgets are loaded
@@ -385,6 +402,13 @@ export default {
       const trips = this.transactionsWithDesignations.filter(t => t.tripName);
       console.log('Trip transactions:', trips.length);
       return trips;
+    },
+
+    personDisplayNames() {
+      return {
+        left: this.personNames.left?.name || this.selectedBudget(this.leftBudgetId, this.budgets)?.name || 'Left',
+        right: this.personNames.right?.name || this.selectedBudget(this.rightBudgetId, this.budgets)?.name || 'Right',
+      };
     },
 
     budgetColorHex() {
@@ -638,6 +662,13 @@ export default {
           transactionsWithTrips
         };
       }
+    },
+
+    handlePersonNameChanged({ budgetType, name }) {
+      this.personNames = { ...this.personNames, [budgetType]: { name } };
+    },
+    handleCategoryOwnersChanged(map) {
+      this.categoryOwners = { ...map };
     },
 
     // Handle budget color selection from Budget components
