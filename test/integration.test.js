@@ -14,6 +14,7 @@ import {
   processTransactionsWithTrips,
   processTransactions,
   isTransferTransaction,
+  computeSettlement,
 } from '../src/utils/designations/index.js';
 
 import {
@@ -299,5 +300,35 @@ describe('full processTransactions pipeline', () => {
     // (some may have multiple designations, some may have none)
     expect(transfers.length + household.length + trips.length + undesignated.length)
       .toBeGreaterThanOrEqual(fullyProcessed.length);
+  });
+});
+
+describe('ownership end-to-end', () => {
+  const ownership = {
+    personNames: { left: { name: 'Peter' }, right: { name: 'Carey' } },
+    categoryOwners: {},
+  };
+
+  it('a #peter memo makes a left-paid expense owned by left (no debt)', () => {
+    const txns = [
+      { id: 'a', date: '2024-03-01', source: 'left', amount: -50000, memo: 'thing #peter', category_id: null },
+      { id: 'b', date: '2024-03-02', source: 'left', amount: -50000, memo: 'shared thing', category_id: null },
+    ];
+    const processed = addHashtagsToTransactions(txns, { ownership });
+    expect(processed.find(t => t.id === 'a').ownerSide).toBe('left');
+
+    const { net } = computeSettlement(processed, { leftName: 'Peter', rightName: 'Carey' });
+    // Only the shared $50 counts: Carey owes Peter $25 (positive = right owes left).
+    expect(net).toBe(25000);
+  });
+
+  it('all-shared net equals the legacy /2 formula on the fixture (scoped to shared)', () => {
+    const processed = addHashtagsToTransactions(sampleTransactions, { ownership });
+    // Scope to transactions the pipeline resolved as shared, so any stray #peter/#carey
+    // memos or category mappings in the fixture can't skew the comparison.
+    const shared = processed.filter(t => (t.ownerSide || 'shared') === 'shared');
+    const legacy = shared.reduce((r, t) => r + (t.source === 'left' ? t.amount : -t.amount), 0) / 2;
+    const { net } = computeSettlement(shared);
+    expect(Math.abs(net)).toBe(Math.abs(legacy));
   });
 });
