@@ -327,6 +327,7 @@ describe('ownership end-to-end', () => {
     // Scope to transactions the pipeline resolved as shared, so any stray #peter/#carey
     // memos or category mappings in the fixture can't skew the comparison.
     const shared = processed.filter(t => (t.ownerSide || 'shared') === 'shared');
+    expect(shared.length).toBeGreaterThan(0);
     const legacy = shared.reduce((r, t) => r + (t.source === 'left' ? t.amount : -t.amount), 0) / 2;
     const { net } = computeSettlement(shared);
     expect(Math.abs(net)).toBe(Math.abs(legacy));
