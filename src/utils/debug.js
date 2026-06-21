@@ -3,6 +3,8 @@
  * Access via browser console: window.ynabDebug
  */
 
+import { summarizeGroups } from './designations/index.js';
+
 // Getter function to be set by App.vue
 let getTransactions = () => [];
 
@@ -163,6 +165,25 @@ function getSummary() {
   };
 }
 
+/**
+ * Funded Groups summary for the current transactions.
+ * Prints a table of groups and reconciliation numbers to the console.
+ * @returns {{ groups, net, clearingPool, openTailTotal, residual }}
+ */
+function fundedGroups() {
+  const transactions = getTransactions();
+  const s = summarizeGroups(transactions);
+  console.table(s.groups.map(g => ({
+    group: g.label,
+    kind: g.kind,
+    net: g.net / 1000,
+    status: g.status,
+    settled: `${g.settledCount}/${g.count}`,
+  })));
+  console.log('net', s.net / 1000, 'openTail', s.openTailTotal / 1000, 'residual', s.residual / 1000);
+  return s;
+}
+
 // Expose utilities on window for console access
 if (typeof window !== 'undefined') {
   window.ynabDebug = {
@@ -172,6 +193,7 @@ if (typeof window !== 'undefined') {
     copyToClipboard,
     downloadJSON,
     getSummary,
+    fundedGroups,
     help: () => {
       console.log(`
 ynabDebug - Transaction Export Utilities
@@ -185,9 +207,11 @@ Commands:
   ynabDebug.copyToClipboard(data?)   - Copy to clipboard (default: all)
   ynabDebug.downloadJSON(file?, data?) - Download as JSON file
   ynabDebug.getSummary()             - Get designation statistics
+  ynabDebug.fundedGroups()           - Show funded groups summary table
 
 Examples:
   ynabDebug.getSummary()
+  ynabDebug.fundedGroups()
   ynabDebug.exportFiltered({ hasTransferTag: true })
   ynabDebug.exportFiltered({ tripName: 'tripHawaii' })
   ynabDebug.exportFiltered({ undesignated: true })
