@@ -3,7 +3,7 @@
     <div class="card-header bg-light d-flex justify-content-between align-items-center">
       <h5 class="mb-0">
         <i class="fas fa-cog me-2"></i>
-        Household Category Settings
+        Category Settings
       </h5>
       <div class="d-flex align-items-center">
         <span class="badge bg-success me-2" :title="selectedCount + ' categories selected as household'">
@@ -21,8 +21,7 @@
 
     <div v-show="showPanel" class="card-body">
       <p class="text-muted small mb-3">
-        Select categories that should automatically be tagged as household expenses.
-        These will be excluded from trip analysis.
+        Mark categories as household expenses (auto-tagged #household, excluded from trip analysis) and assign each an owner (Shared, or one person) for settlement.
       </p>
 
       <!-- Flat list of categories with budget color indicators -->
