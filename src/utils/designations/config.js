@@ -109,3 +109,75 @@ export function saveHouseholdCategoryIds(categoryIds) {
     console.warn('Failed to save household categories:', e);
   }
 }
+
+const PERSON_NAMES_KEY = 'person_names';
+const CATEGORY_OWNERS_KEY = 'category_owners';
+
+/**
+ * Derive a hashtag slug from a person name: lowercase, alphanumerics only.
+ * @param {string} name
+ * @returns {string} e.g. "Anna Lee" -> "annalee"
+ */
+export function slugifyPersonName(name) {
+  return (name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Load per-side person names from localStorage.
+ * @returns {{left:{name:string}, right:{name:string}}}
+ */
+export function loadPersonNames() {
+  try {
+    const saved = localStorage.getItem(PERSON_NAMES_KEY);
+    const parsed = saved ? JSON.parse(saved) : {};
+    return {
+      left: { name: parsed?.left?.name || '' },
+      right: { name: parsed?.right?.name || '' },
+    };
+  } catch (e) {
+    console.warn('Failed to load person names:', e);
+    return { left: { name: '' }, right: { name: '' } };
+  }
+}
+
+/**
+ * Save per-side person names to localStorage.
+ * @param {{left:{name:string}, right:{name:string}}} personNames
+ */
+export function savePersonNames(personNames) {
+  try {
+    localStorage.setItem(PERSON_NAMES_KEY, JSON.stringify({
+      left: { name: personNames?.left?.name || '' },
+      right: { name: personNames?.right?.name || '' },
+    }));
+  } catch (e) {
+    console.warn('Failed to save person names:', e);
+  }
+}
+
+/**
+ * Load category->owner map ({ [categoryId]: 'left' | 'right' }) from localStorage.
+ * Shared categories are absent from the map.
+ * @returns {Object<string,string>}
+ */
+export function loadCategoryOwners() {
+  try {
+    const saved = localStorage.getItem(CATEGORY_OWNERS_KEY);
+    return saved ? JSON.parse(saved) : {};
+  } catch (e) {
+    console.warn('Failed to load category owners:', e);
+    return {};
+  }
+}
+
+/**
+ * Save category->owner map to localStorage.
+ * @param {Object<string,string>} map
+ */
+export function saveCategoryOwners(map) {
+  try {
+    localStorage.setItem(CATEGORY_OWNERS_KEY, JSON.stringify(map || {}));
+  } catch (e) {
+    console.warn('Failed to save category owners:', e);
+  }
+}
