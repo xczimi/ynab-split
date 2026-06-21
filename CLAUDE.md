@@ -136,4 +136,4 @@ Coverage targets: 80% statements/functions/lines, 65% branches. Run `npm test --
 
 ## Documentation
 
-See `docs/features.md` for detailed user-facing documentation on transfers, trips, household expenses, and the designation system.
+See `docs/product.md` for the product overview and requirements — target user, goals, non-goals, current capabilities (transfers, trips, household expenses, settlement, the designation system), known limitations, and open questions.
