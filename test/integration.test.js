@@ -17,6 +17,7 @@ import {
   computeSettlement,
   markSettled,
   settlementWatermark,
+  summarizeGroups,
 } from '../src/utils/designations/index.js';
 
 import {
@@ -357,5 +358,37 @@ describe('settlement watermark over the real fixture', () => {
     expect(w.residual).toBe(-217505);
     expect(w.openTailTotal + w.residual).toBe(w.net);
     expect(w.net).toBe(computeSettlement(processed).net);
+  });
+});
+
+describe('funded groups over the real fixture', () => {
+  const processed = processTransactions(sampleTransactions, {
+    ownership: { personNames: { left: { name: 'Left' }, right: { name: 'Right' } }, categoryOwners: {} },
+  });
+  const summary = summarizeGroups(processed);
+
+  it('produces 12 groups, 7 fully settled', () => {
+    expect(summary.groups.length).toBe(12);
+    expect(summary.groups.filter(g => g.status === 'settled').length).toBe(7);
+  });
+
+  it('trip2025May9 is partial 15/22', () => {
+    const g = summary.groups.find(x => x.key === 'trip:trip2025May9');
+    expect(g.count).toBe(22);
+    expect(g.settledCount).toBe(15);
+    expect(g.status).toBe('partial');
+  });
+
+  it('the open groups are the recent trip + 2025 Q3/Q4', () => {
+    const open = summary.groups.filter(g => g.status === 'open').map(g => g.key).sort();
+    expect(open).toEqual(['quarter:2025-Q3', 'quarter:2025-Q4', 'trip:trip2025May31-Jun2'].sort());
+  });
+
+  it('group nets sum to total accrued; reconciles to the headline net', () => {
+    // total accrued = net + clearingPool = 286155 + 9067400
+    const totalAccrued = summary.groups.reduce((s, g) => s + g.net, 0);
+    expect(totalAccrued).toBe(9353555);
+    expect(summary.openTailTotal + summary.residual).toBe(summary.net);
+    expect(summary.net).toBe(286155);
   });
 });
