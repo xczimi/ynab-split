@@ -52,11 +52,22 @@
         </span>
       </div>
       <div class="card-text">
-        <div class="alert mb-4" :class="{'alert-info': otherTotal > total, 'alert-success': otherTotal <= total}">
+        <div class="alert mb-4" :class="{'alert-info': isOwed, 'alert-success': !isOwed}">
           <div class="d-flex justify-content-between">
-            <strong>{{ otherTotal > total ? "Owed" : "Owes" }}</strong>
-            <span class="text-end">{{ formatCurrency(Math.abs((otherTotal - total) / 2)) }}</span>
+            <strong>{{ isOwed ? "Owed" : "Owes" }}</strong>
+            <span class="text-end">{{ formatCurrency(settlementAmount) }}</span>
           </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small text-light-emphasis mb-1">Person name</label>
+          <input
+            type="text"
+            class="form-control form-control-sm"
+            v-model="personName"
+            @change="onPersonNameChanged"
+            :placeholder="selectedBudget(budgetId, budgets)?.name"
+          />
         </div>
 
         <div class="d-flex justify-content-between align-items-center">
@@ -65,7 +76,12 @@
           </button>
 
           <div class="text-end">
-            <div class="small text-light-emphasis mb-1">Transactions</div>
+            <div class="small text-light-emphasis mb-1">
+              Transactions
+              <span class="d-block" title="Only transactions on or after this date are loaded">
+                since {{ formattedSinceDate }}
+              </span>
+            </div>
             <span class="badge rounded-pill bg-light text-dark">
               {{ transactions.length }}
             </span>
@@ -85,6 +101,8 @@ import {
   storageUtils,
   errorUtils
 } from '../utils/transactions';
+import { loadPersonNames, savePersonNames } from '../utils/designations/config.js';
+import { DateTime } from 'luxon';
 
 export default {
   name: "Budget",
@@ -113,6 +131,11 @@ export default {
     sinceDate: {
       type: String,
       default: "2024-01-01"
+    },
+    // Ownership-aware settlement net (milliunits; positive = right owes left)
+    settlementNet: {
+      type: Number,
+      default: 0
     }
   },
   data() {
@@ -120,6 +143,7 @@ export default {
       transactions: [],
       loading: false,
       error: null,
+      personName: '',
       selectedColorValue: null, // Add reactive property for selected color
       availableColors: [
         { value: 'bg-success', name: 'Green', class: 'bg-success' },
@@ -134,10 +158,24 @@ export default {
   mounted() {
     // Load saved color on component mount
     this.loadSavedColor();
+    this.personName = loadPersonNames()[this.budgetType]?.name || '';
   },
   computed: {
     total() {
       return transactionsTotal(this.transactions);
+    },
+    // Human-readable form of the (non-configurable) sinceDate filter, shown next to the count
+    formattedSinceDate() {
+      const dt = DateTime.fromISO(this.sinceDate);
+      return dt.isValid ? dt.toFormat('MMM d, yyyy') : this.sinceDate;
+    },
+    // This side is "Owed" when the net settlement points toward it.
+    // settlementNet > 0 means the right person owes the left person.
+    isOwed() {
+      return this.budgetType === 'left' ? this.settlementNet > 0 : this.settlementNet < 0;
+    },
+    settlementAmount() {
+      return Math.abs(this.settlementNet);
     },
     selectedColor() {
       // Use reactive data property instead of reading localStorage directly
@@ -217,7 +255,9 @@ export default {
       storageUtils.saveBudgetId(this.budgetType, budgetId);
 
       try {
-        this.transactions = await getEnhancedTransactions(this.api, budgetId, this.sinceDate);
+        const transactions = await getEnhancedTransactions(this.api, budgetId, this.sinceDate);
+
+        this.transactions = transactions;
         console.log(`${this.budgetType} transactions loaded:`, this.transactions.length);
 
         // Emit transactions to parent
@@ -268,6 +308,12 @@ export default {
       if (savedColor) {
         this.selectedColorValue = savedColor;
       }
+    },
+    onPersonNameChanged() {
+      const all = loadPersonNames();
+      const updated = { ...all, [this.budgetType]: { name: this.personName } };
+      savePersonNames(updated);
+      this.$emit('person-name-changed', { budgetType: this.budgetType, name: this.personName });
     }
   }
 }

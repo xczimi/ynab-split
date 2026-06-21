@@ -83,6 +83,47 @@ export async function getEnhancedTransactions(api, budgetId, sinceDate = "2024-0
 }
 
 /**
+ * Get categories for a budget
+ * @param {Object} api - YNAB API instance
+ * @param {string} budgetId - Budget ID
+ * @returns {Promise<Object>} - Promise resolving to { categoryGroups, categoriesById }
+ */
+export async function getCategories(api, budgetId) {
+  try {
+    console.log(`Getting categories for budget ${budgetId}`);
+    const catRes = await api.categories.getCategories(budgetId);
+
+    const categoriesById = {};
+    const categoryGroups = catRes.data.category_groups.map(group => {
+      group.categories.forEach(cat => {
+        categoriesById[cat.id] = {
+          ...cat,
+          category_group_name: group.name
+        };
+      });
+      return {
+        id: group.id,
+        name: group.name,
+        hidden: group.hidden,
+        categories: group.categories.filter(c => !c.hidden && !c.deleted)
+      };
+    });
+
+    // Filter out internal YNAB category groups
+    const filteredGroups = categoryGroups.filter(g =>
+      !g.hidden &&
+      !['Internal Master Category', 'Credit Card Payments'].includes(g.name)
+    );
+
+    console.log(`Categories loaded: ${Object.keys(categoriesById).length} categories in ${filteredGroups.length} groups`);
+    return { categoryGroups: filteredGroups, categoriesById };
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    throw error;
+  }
+}
+
+/**
  * Currency formatting utilities
  */
 export const currencyUtils = {

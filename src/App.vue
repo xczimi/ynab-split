@@ -61,6 +61,7 @@
                 :budgetId="leftBudgetId"
                 budgetType="left"
                 :otherTotal="rightTotal"
+                :settlementNet="settlementNet"
                 :api="api"
                 :sinceDate="sinceDate"
                 @budget-selected="handleLeftBudgetSelected"
@@ -68,6 +69,7 @@
                 @budget-error="handleBudgetError"
                 @budget-loading-changed="handleBudgetLoadingChanged"
                 @color-selected="handleBudgetColorSelected"
+                @person-name-changed="handlePersonNameChanged"
               />
             </div>
             <div class="col-md-6">
@@ -76,6 +78,7 @@
                 :budgetId="rightBudgetId"
                 budgetType="right"
                 :otherTotal="leftTotal"
+                :settlementNet="settlementNet"
                 :api="api"
                 :sinceDate="sinceDate"
                 @budget-selected="handleRightBudgetSelected"
@@ -83,42 +86,86 @@
                 @budget-error="handleBudgetError"
                 @budget-loading-changed="handleBudgetLoadingChanged"
                 @color-selected="handleBudgetColorSelected"
-              />
-            </div>
-          </div>
-                      <!-- Trip Summary Section -->
-                      <div v-if="leftBudgetId && rightBudgetId" class="row mb-4">
-            <div class="col-12">
-              <TripSummary
-                :transactions="tripTransactions"
-                :trips="tripSummaryData.trips"
-                :transactionsWithTrips="tripSummaryData.transactionsWithTrips"
-                @identify-trips="identifyTrips"
+                @person-name-changed="handlePersonNameChanged"
               />
             </div>
           </div>
 
-          <!-- Transfer Summary Section -->
-          <div v-if="leftBudgetId && rightBudgetId" class="row mb-4">
-            <div class="col-12">
-              <TransferSummary
-                :transactions="transferTransactions"
-                :allTransactions="transactionsWithDesignations"
-                :selectedLeftBudget="selectedBudget(leftBudgetId, budgets)"
-                :selectedRightBudget="selectedBudget(rightBudgetId, budgets)"
-              />
+          <!-- Tab Navigation -->
+          <ul v-if="leftBudgetId || rightBudgetId" class="nav nav-tabs mb-4">
+            <li class="nav-item">
+              <a class="nav-link"
+                 :class="{ active: activeTab === 'trips' }"
+                 @click.prevent="activeTab = 'trips'"
+                 href="#">
+                <i class="fas fa-plane me-1"></i> Trip Analysis
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link"
+                 :class="{ active: activeTab === 'joint', disabled: !leftBudgetId || !rightBudgetId }"
+                 @click.prevent="leftBudgetId && rightBudgetId && (activeTab = 'joint')"
+                 href="#"
+                 :title="!leftBudgetId || !rightBudgetId ? 'Select both budgets to compare joint spending' : ''">
+                <i class="fas fa-handshake me-1"></i> Joint Spending
+              </a>
+            </li>
+          </ul>
+
+          <!-- Trip Analysis Tab -->
+          <div v-if="activeTab === 'trips' && (leftBudgetId || rightBudgetId)">
+            <div class="row mb-4">
+              <div class="col-12">
+                <TripSummary
+                  :transactions="tripTransactions"
+                  :trips="tripSummaryData.trips"
+                  :transactionsWithTrips="tripSummaryData.transactionsWithTrips"
+                  @identify-trips="identifyTrips"
+                />
+              </div>
             </div>
           </div>
 
-          <!-- Household Summary Section -->
-          <div v-if="leftBudgetId && rightBudgetId" class="row mb-4">
-            <div class="col-12">
-              <HouseholdSummary
-                :transactions="householdTransactions"
-                :allTransactions="transactionsWithDesignations"
-                :selectedLeftBudget="selectedBudget(leftBudgetId, budgets)"
-                :selectedRightBudget="selectedBudget(rightBudgetId, budgets)"
-              />
+          <!-- Joint Spending Tab -->
+          <div v-if="activeTab === 'joint' && leftBudgetId && rightBudgetId">
+            <!-- Household Category Settings -->
+            <div class="row mb-4">
+              <div class="col-12">
+                <CategorySettings
+                  :transactions="transactionsWithDesignations"
+                  :leftColor="budgetColorHex.left"
+                  :rightColor="budgetColorHex.right"
+                  :leftName="personDisplayNames.left"
+                  :rightName="personDisplayNames.right"
+                  @categories-changed="handleHouseholdCategoriesChanged"
+                  @owners-changed="handleCategoryOwnersChanged"
+                />
+              </div>
+            </div>
+
+            <!-- Transfer Summary Section -->
+            <div class="row mb-4">
+              <div class="col-12">
+                <TransferSummary
+                  :transactions="transferTransactions"
+                  :allTransactions="transactionsWithDesignations"
+                  :selectedLeftBudget="selectedBudget(leftBudgetId, budgets)"
+                  :selectedRightBudget="selectedBudget(rightBudgetId, budgets)"
+                />
+              </div>
+            </div>
+
+            <!-- Balance Timeline Chart -->
+            <div class="row mb-4">
+              <div class="col-12">
+                <BalanceTimeline
+                  :transactions="transactionsWithDesignations"
+                  :leftColor="budgetColorHex.left"
+                  :rightColor="budgetColorHex.right"
+                  :leftBudgetName="personDisplayNames.left"
+                  :rightBudgetName="personDisplayNames.right"
+                />
+              </div>
             </div>
           </div>
 
@@ -133,6 +180,8 @@
                     ref="combinedTransactions"
                     :transactions="transactionsWithDesignations"
                     :loading="false"
+                    :leftName="personDisplayNames.left"
+                    :rightName="personDisplayNames.right"
                     @trips-identified="handleTripsIdentified"
                     @trips-reset="resetTrips"
                     @transaction-updated="handleTransactionUpdated"
@@ -190,10 +239,17 @@ import {
   getTripSummaries
 } from './utils/designator';
 
+// Import config helpers for ownership persistence
+import { loadPersonNames, loadCategoryOwners, loadHouseholdCategoryIds } from './utils/designations/config.js';
+import { computeSettlement } from './utils/designations/index.js';
+
 // Import trip-specific functions from the new trips utility
 import {
   DEFAULT_TRIP_SETTINGS
 } from './utils/trips';
+
+// Import debug utilities for console access
+import { setTransactionGetter } from './utils/debug';
 
 // Import our config for YNAB
 import config from './config.json';
@@ -206,7 +262,8 @@ import Transactions from './components/Transactions.vue';
 import CombinedTransactions from './components/CombinedTransactions.vue';
 import TripSummary from './components/TripSummary.vue';
 import TransferSummary from './components/TransferSummary.vue';
-import HouseholdSummary from './components/HouseholdSummary.vue';
+import BalanceTimeline from './components/BalanceTimeline.vue';
+import CategorySettings from './components/CategorySettings.vue';
 
 export default {
   // The data to feed our templates
@@ -233,7 +290,7 @@ export default {
       budgets: [],
       // New combined data model
       combinedTransactions: [], // All transactions with designations
-      processedTransactions: [], // Transactions with trip/transfer/household tags
+      processedTransactions: [], // Transactions with trip/transfer tags
       tripSummaryData: {
         trips: [],
         transactionsWithTrips: 0
@@ -244,7 +301,13 @@ export default {
       budgetColors: {
         left: 'bg-primary',
         right: 'bg-success'
-      }
+      },
+      // Active view tab
+      activeTab: 'trips', // 'joint' or 'trips' - default to trips since it works with 1 budget
+      // Ownership state
+      personNames: { left: { name: '' }, right: { name: '' } },
+      categoryOwners: {},
+      householdCategoryIds: [],
     }
   },
   // When this component is created, check whether we need to get a token,
@@ -262,10 +325,16 @@ export default {
 
     // Load saved budget colors on startup
     this.loadSavedBudgetColors();
+    this.personNames = loadPersonNames();
+    this.categoryOwners = loadCategoryOwners();
+    this.householdCategoryIds = loadHouseholdCategoryIds();
   },
   mounted() {
     // Apply initial budget colors to CSS variables
     this.updateBudgetColorVariables();
+
+    // Set up debug utilities with transaction getter
+    setTransactionGetter(() => this.transactionsWithDesignations);
   },
   computed: {
     // Combined transactions from both budgets
@@ -279,7 +348,7 @@ export default {
       return sortingUtils.sortNewestFirst(combined);
     },
 
-    // Transactions with designations (transfer, household, trips)
+    // Transactions with designations (transfer, trips)
     transactionsWithDesignations() {
       // Only process designations when both budgets are selected and have completed loading
       if (this.allTransactions.length === 0) return [];
@@ -309,7 +378,10 @@ export default {
       console.log('Processing', this.allTransactions.length, 'transactions');
 
       // Add automatic hashtags and process transactions
-      const transactionsWithHashtags = addHashtagsToTransactions(this.allTransactions);
+      const transactionsWithHashtags = addHashtagsToTransactions(this.allTransactions, {
+        ownership: { personNames: this.personNames, categoryOwners: this.categoryOwners },
+        householdCategoryIds: this.householdCategoryIds,
+      });
       console.log('After hashtag processing:', transactionsWithHashtags.length, 'transactions');
 
       // Automatically process trips when both budgets are loaded
@@ -332,19 +404,40 @@ export default {
       return transfers;
     },
 
-    householdTransactions() {
-      const household = this.transactionsWithDesignations.filter(t => t.hasHouseholdTag);
-      console.log('Household transactions for component:', household.length);
-      if (household.length > 0) {
-        console.log('Sample household transaction:', household[0]);
-      }
-      return household;
-    },
-
     tripTransactions() {
       const trips = this.transactionsWithDesignations.filter(t => t.tripName);
       console.log('Trip transactions:', trips.length);
       return trips;
+    },
+
+    personDisplayNames() {
+      return {
+        left: this.personNames.left?.name || this.selectedBudget(this.leftBudgetId, this.budgets)?.name || 'Left',
+        right: this.personNames.right?.name || this.selectedBudget(this.rightBudgetId, this.budgets)?.name || 'Right',
+      };
+    },
+
+    // Single ownership-aware settlement figure (positive = right owes left)
+    settlementNet() {
+      return computeSettlement(this.transactionsWithDesignations, {
+        leftName: this.personDisplayNames.left,
+        rightName: this.personDisplayNames.right,
+      }).net;
+    },
+
+    budgetColorHex() {
+      const colorMap = {
+        'bg-success': '#198754',
+        'bg-danger': '#dc3545',
+        'bg-warning': '#ffc107',
+        'bg-info': '#0dcaf0',
+        'bg-primary': '#0d6efd',
+        'bg-secondary': '#6c757d'
+      };
+      return {
+        left: colorMap[this.budgetColors.left] || '#0d6efd',
+        right: colorMap[this.budgetColors.right] || '#198754'
+      };
     }
   },
   watch: {
@@ -544,6 +637,13 @@ export default {
       }
     },
 
+    handleHouseholdCategoriesChanged(categoryIds) {
+      // Reactive update: reassign so transactionsWithDesignations recomputes with
+      // the new household category IDs (a previous $forceUpdate could not invalidate
+      // the cached computed, since the IDs were read non-reactively from localStorage).
+      this.householdCategoryIds = [...categoryIds];
+    },
+
     // New method to handle transaction updates from components
     handleTransactionUpdated(updatedTransaction) {
       console.log('Transaction updated:', updatedTransaction);
@@ -575,6 +675,13 @@ export default {
           transactionsWithTrips
         };
       }
+    },
+
+    handlePersonNameChanged({ budgetType, name }) {
+      this.personNames = { ...this.personNames, [budgetType]: { name } };
+    },
+    handleCategoryOwnersChanged(map) {
+      this.categoryOwners = { ...map };
     },
 
     // Handle budget color selection from Budget components
@@ -628,7 +735,8 @@ export default {
     CombinedTransactions,
     TripSummary,
     TransferSummary,
-    HouseholdSummary
+    BalanceTimeline,
+    CategorySettings
   },
 }
 </script>

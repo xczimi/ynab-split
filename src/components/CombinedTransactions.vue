@@ -81,6 +81,14 @@
             </option>
           </select>
         </div>
+
+        <!-- Owner Filter Dropdown -->
+        <select class="form-select form-select-sm w-auto ms-2" v-model="ownerFilter" title="Filter by owner">
+          <option value="all">All owners</option>
+          <option value="shared">Shared</option>
+          <option value="left">{{ leftName }}</option>
+          <option value="right">{{ rightName }}</option>
+        </select>
       </div>
       <div class="text-muted small">
         Showing {{ filteredTransactions.length }} of {{ combinedTransactions.length }} transactions
@@ -221,6 +229,17 @@
                   <i class="fas fa-times"></i>
                 </button>
               </div>
+
+              <!-- Owner badge -->
+              <span
+                class="badge ms-1"
+                :class="{
+                  'bg-secondary': (transaction.ownerSide || 'shared') === 'shared',
+                  'bg-primary': transaction.ownerSide === 'left',
+                  'bg-success': transaction.ownerSide === 'right'
+                }"
+                :title="'Owner: ' + ownerLabel(transaction.ownerSide || 'shared')"
+              >{{ ownerLabel(transaction.ownerSide || 'shared') }}</span>
             </td>
             <td class="text-end" :class="{'text-danger': transaction.amount < 0, 'text-success': transaction.amount > 0}">
               {{ formatCurrency(transaction.amount) }}
@@ -248,7 +267,9 @@ export default {
     loading: {
       type: Boolean,
       default: false
-    }
+    },
+    leftName: { type: String, default: 'Left' },
+    rightName: { type: String, default: 'Right' }
   },
   data() {
     return {
@@ -258,6 +279,7 @@ export default {
       showTrips: false,
       showUndesignated: false, // New toggle for undesignated transactions
       selectedTripFilter: '', // Trip filter dropdown
+      ownerFilter: 'all',
       // Editing state
       editingDesignationId: null, // Track which transaction is being edited
       editingDesignationType: '', // For tracking designation type during editing
@@ -313,7 +335,8 @@ export default {
         }
 
         return true;
-      });
+      })
+        .filter(t => this.ownerFilter === 'all' || (t.ownerSide || 'shared') === this.ownerFilter);
 
       // Use centralized sorting utility from transactions.js
       return sortingUtils.sortNewestFirst(filtered);
@@ -348,6 +371,12 @@ export default {
   },
 
   methods: {
+    ownerLabel(ownerSide) {
+      if (ownerSide === 'left') return this.leftName;
+      if (ownerSide === 'right') return this.rightName;
+      return 'Shared';
+    },
+
     convertMilliUnitsToCurrencyAmount: currencyUtils.convertMilliUnitsToCurrencyAmount,
     formatCurrency(milliunits) {
       return currencyUtils.formatCurrency(milliunits);

@@ -129,15 +129,19 @@ export default {
       const monthlyGroups = {};
 
       this.transactions.forEach(transaction => {
-        const date = new Date(transaction.date);
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        // Parse date string directly to avoid timezone issues
+        // transaction.date is "YYYY-MM-DD" format
+        const [year, month] = transaction.date.split('-').map(Number);
+        const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                           'July', 'August', 'September', 'October', 'November', 'December'];
 
         if (!monthlyGroups[monthKey]) {
           monthlyGroups[monthKey] = {
             monthKey,
-            year: date.getFullYear(),
-            month: date.getMonth() + 1,
-            monthDisplay: date.toLocaleDateString('en-US', { month: 'long' }),
+            year,
+            month,
+            monthDisplay: monthNames[month - 1],
             leftTransactions: [],
             rightTransactions: [],
             leftAmount: 0,

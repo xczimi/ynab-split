@@ -16,9 +16,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: "Install dependencies, then build output JS bundle"
+      - name: "Install dependencies"
+        run: npm install
+      - name: "Run tests"
+        run: node --experimental-vm-modules node_modules/jest/bin/jest.js
+      - name: "Build output JS bundle"
         run: |
-          npm install
           npm run build --if-present
           cp -pR ./dist ./public
       - name: Deploy to 'gh-pages' branch
