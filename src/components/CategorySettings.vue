@@ -27,7 +27,7 @@
 
       <!-- Flat list of categories with budget color indicators -->
       <div v-if="usedCategories.length > 0" class="category-list" style="max-height: 400px; overflow-y: auto;">
-        <div v-for="category in usedCategories" :key="category.id" class="form-check">
+        <div v-for="category in usedCategories" :key="category.id" class="form-check d-flex align-items-center">
           <input
             type="checkbox"
             class="form-check-input"
@@ -35,7 +35,7 @@
             :checked="isSelected(category.id)"
             @change="toggleCategory(category.id)"
           >
-          <label class="form-check-label d-flex align-items-center" :for="'cat-' + category.id">
+          <label class="form-check-label d-flex align-items-center flex-grow-1" :for="'cat-' + category.id">
             <span
               class="budget-indicator me-2"
               :style="{ backgroundColor: category.source === 'left' ? leftColor : rightColor }"
@@ -43,6 +43,17 @@
             ></span>
             {{ category.displayName }}
           </label>
+          <select
+            class="form-select form-select-sm ms-2"
+            style="width: auto;"
+            :value="ownerOf(category.id)"
+            @change="setOwner(category.id, $event.target.value)"
+            title="Who is responsible for this category"
+          >
+            <option value="shared">Shared</option>
+            <option value="left">{{ leftName }}</option>
+            <option value="right">{{ rightName }}</option>
+          </select>
         </div>
       </div>
 
@@ -58,11 +69,13 @@
 import {
   loadHouseholdCategoryIds,
   saveHouseholdCategoryIds,
+  loadCategoryOwners,
+  saveCategoryOwners,
   defaultConfig
 } from '../utils/designations/config.js';
 
 export default {
-  name: 'HouseholdCategorySettings',
+  name: 'CategorySettings',
   props: {
     transactions: {
       type: Array,
@@ -75,16 +88,20 @@ export default {
     rightColor: {
       type: String,
       default: '#198754'
-    }
+    },
+    leftName: { type: String, default: 'Left' },
+    rightName: { type: String, default: 'Right' }
   },
   data() {
     return {
       showPanel: false,
-      selectedCategoryIds: []
+      selectedCategoryIds: [],
+      categoryOwners: {}
     };
   },
   created() {
     this.selectedCategoryIds = loadHouseholdCategoryIds();
+    this.categoryOwners = loadCategoryOwners();
   },
   computed: {
     usedCategories() {
@@ -168,6 +185,20 @@ export default {
       }
       saveHouseholdCategoryIds(this.selectedCategoryIds);
       this.$emit('categories-changed', this.selectedCategoryIds);
+    },
+    ownerOf(categoryId) {
+      return this.categoryOwners[categoryId] || 'shared';
+    },
+    setOwner(categoryId, value) {
+      const next = { ...this.categoryOwners };
+      if (value === 'shared') {
+        delete next[categoryId];
+      } else {
+        next[categoryId] = value;
+      }
+      this.categoryOwners = next;
+      saveCategoryOwners(next);
+      this.$emit('owners-changed', next);
     }
   }
 };

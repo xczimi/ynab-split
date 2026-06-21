@@ -127,7 +127,7 @@
             <!-- Household Category Settings -->
             <div class="row mb-4">
               <div class="col-12">
-                <HouseholdCategorySettings
+                <CategorySettings
                   :transactions="transactionsWithDesignations"
                   :leftColor="budgetColorHex.left"
                   :rightColor="budgetColorHex.right"
@@ -250,7 +250,7 @@ import CombinedTransactions from './components/CombinedTransactions.vue';
 import TripSummary from './components/TripSummary.vue';
 import TransferSummary from './components/TransferSummary.vue';
 import BalanceTimeline from './components/BalanceTimeline.vue';
-import HouseholdCategorySettings from './components/HouseholdCategorySettings.vue';
+import CategorySettings from './components/CategorySettings.vue';
 
 export default {
   // The data to feed our templates
@@ -692,7 +692,7 @@ export default {
     TripSummary,
     TransferSummary,
     BalanceTimeline,
-    HouseholdCategorySettings
+    CategorySettings
   },
 }
 </script>
