@@ -40,9 +40,12 @@ export function isClearing(transaction) {
 }
 
 /**
- * The clearing pool: total settle-up magnitude in the net's direction (milliunits).
+ * The clearing pool: signed settle-up total in the net's direction (milliunits).
  * = -Σ(contribution) over clearings. Clearings pay the balance down, so they sum
- * negative when the net is positive; negating yields a positive pool magnitude.
+ * negative when the net is positive; negating yields a positive pool when the net is
+ * positive, and a negative pool when the net is negative (left owes right). The pool
+ * can exceed the accrual total (over-cleared), causing `net` to flip sign relative to
+ * the accruals — use magnitude comparisons (Math.abs) when testing coverage.
  * @param {Array} transactions
  * @returns {number}
  */
@@ -84,7 +87,11 @@ export function markSettled(transactions = [], options = {}) {
       continue;
     }
     running += transactionContribution(t);
-    settledByIndex[index] = sign === 0 ? true : sign * running <= sign * pool;
+    // Compare magnitudes: an accrual is settled once the cumulative accrued amount has
+    // been covered by the clearing pool. Using |running| <= |pool| (rather than signing
+    // both sides by sign(net)) also handles the over-cleared case, where net flips sign
+    // relative to the accruals because the settle-up over-pays.
+    settledByIndex[index] = sign === 0 ? true : Math.abs(running) <= Math.abs(pool);
   }
 
   return transactions.map((t, index) => ({

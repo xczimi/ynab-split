@@ -132,6 +132,15 @@ describe('markSettled (oldest-first A1 rule)', () => {
     ];
     expect(markSettled(offsetting).every(t => t.settled)).toBe(true);
   });
+
+  it('over-cleared: all accruals settled when the pool exceeds accruals and net flips sign', () => {
+    const a1 = { date: '2024-01-01', source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false };
+    const a2 = { date: '2024-02-01', source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false };
+    const clearing = { date: '2024-03-01', source: 'right', amount: -500000, ownerSide: 'shared', hasTransferTag: true };
+    // Σaccruals = +200000 ; pool = 250000 ; net = -50000 (sign flips, but all covered)
+    const marked = markSettled([a1, a2, clearing]);
+    expect(marked.filter(t => !t.hasTransferTag).every(t => t.settled)).toBe(true);
+  });
 });
 
 describe('settlementWatermark', () => {
@@ -144,7 +153,7 @@ describe('settlementWatermark', () => {
     expect(w.net).toBe(150000);
     expect(w.clearingPool).toBe(150000);
     expect(w.openTailTotal).toBe(200000);            // two unsettled +100000 accruals
-    expect(w.residual).toBe(w.net - w.openTailTotal); // -50000
-    expect(w.openTailTotal + w.residual).toBe(w.net); // invariant
+    expect(w.residual).toBe(-50000);                 // concrete: net(150000) - openTail(200000)
+    expect(w.openTailTotal + w.residual).toBe(w.net); // invariant: residual closes the open tail to net
   });
 });
