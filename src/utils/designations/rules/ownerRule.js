@@ -31,8 +31,10 @@ export function detectOwner(transaction, ownership = {}) {
   const hasLeft = !!leftSlug && tags.includes(leftSlug);
   const hasRight = !!rightSlug && rightSlug !== leftSlug && tags.includes(rightSlug);
   if (hasLeft && hasRight) {
-    console.debug('ownerRule: conflicting owner tags, defaulting to shared', transaction.id);
     return { ownerSide: 'shared', reason: 'conflicting owner tags' };
+  }
+  if (leftSlug === rightSlug && (hasLeft || hasRight)) {
+    return { ownerSide: 'shared', reason: 'ambiguous owner tag (slug collision)' };
   }
   if (hasLeft) return { ownerSide: 'left', reason: `#${leftSlug}` };
   if (hasRight) return { ownerSide: 'right', reason: `#${rightSlug}` };

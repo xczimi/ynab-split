@@ -39,4 +39,9 @@ describe('detectOwner precedence', () => {
     const noNames = { personNames: { left: { name: '' }, right: { name: '' } }, categoryOwners: {} };
     expect(detectOwner(tx({ memo: 'x #peter' }), noNames).ownerSide).toBe('shared');
   });
+
+  it('ignores person tags when both names slug-collide', () => {
+    const sameName = { personNames: { left: { name: 'Peter' }, right: { name: 'Peter' } }, categoryOwners: {} };
+    expect(detectOwner(tx({ memo: 'x #peter' }), sameName).ownerSide).toBe('shared');
+  });
 });
