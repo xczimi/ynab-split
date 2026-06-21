@@ -7,7 +7,17 @@
  */
 
 // Configuration
-export { defaultConfig, mergeConfig, loadCustomDesignations, saveCustomDesignations } from './config.js';
+export {
+  defaultConfig,
+  mergeConfig,
+  loadCustomDesignations,
+  saveCustomDesignations,
+  slugifyPersonName,
+  loadPersonNames,
+  savePersonNames,
+  loadCategoryOwners,
+  saveCategoryOwners,
+} from './config.js';
 
 // Main processor functions (primary API)
 export {
@@ -47,6 +57,12 @@ export {
 
 // Custom category rule utilities
 export { detectCustomCategory, detectAllCustomCategories } from './rules/categoryRule.js';
+
+// Owner detection utilities
+export { detectOwner } from './rules/ownerRule.js';
+
+// Settlement utilities
+export { shareOfNonPayer, transactionContribution, computeSettlement } from './settlement.js';
 
 // Individual rule modules (for advanced usage)
 export * as transferRule from './rules/transferRule.js';
