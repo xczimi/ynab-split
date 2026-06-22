@@ -140,10 +140,14 @@ grouped model:
   negative repeatedly; "cumulative accrued position" is not monotonic. ✅ **Resolved
   by the forward-ledger model in §9** (the original oldest-first pool rule was
   disproved by real data and replaced).
-- **`#transfer` false-positive (real, deferred).** A recurring household bill whose
-  amount matches a recurring settle-up within 3 days gets mis-tagged `#transfer`
-  (observed: a monthly $555.97 strata vs a monthly $555.97 e-transfer). This is
-  transfer-detection accuracy, folded into the deferred warning below.
+- **`#transfer` false-positive — ✅ fixed.** A recurring shared expense one partner
+  pays whose amount matches the recurring reimbursement transfer within 3 days was
+  mis-tagged `#transfer` (observed: a monthly $555.97 strata bill vs the monthly
+  $555.97 reimbursement). A real settle-up moves money OUT of one budget and INTO the
+  other (opposite-sign legs); the matcher now requires opposite signs, so a same-sign
+  expense can no longer be mistaken for its reimbursement. Critically, the false tag
+  had been **overriding the user's per-category owner** (Strata Fee = 100% one
+  partner), silently dropping the expense from the split — now respected.
 - **Follow-up (deferred):** a non-blocking **"mark your side of transfers"
   warning** — detect a likely one-sided transfer leg (single-sided amount with no
   cross-budget match, or a known settle-up payee) and nudge the user to tag it
