@@ -101,15 +101,25 @@ do not assign it to a person, trip, or household — **not** exempt from the
 balance. The clearing mechanism the whole funded-groups model depends on already
 works.
 
-## 5. Presentation
+## 5. Presentation — running-balance timeline
 
-- The grouped view **replaces** the "Owes / Owed" presentation (likely in the
-  Joint Spending tab). The budget-card headline can remain as the open-tail total,
-  now *explained* by the groups beneath it.
-- Each group row shows: name, time window, net (who owes whom for that group's
-  accruals), and settled / partial / open status.
-- Settled groups are shown **collapsed / greyed** (visible progress is
-  motivating); open and partial groups are prominent.
+> **Superseded.** An earlier draft showed each group's isolated net and collapsed the
+> settled ones. Real data killed it: with money flowing both ways AND settle-ups,
+> isolated group nets cannot sum to the headline, so two "you owe" open groups could
+> sit under a "they owe you" net — nonsensical. The view below replaces it.
+
+- The grouped view **replaces** the "Owes / Owed" presentation in the Joint Spending
+  tab. Each trip/quarter is a row in a **chronological timeline**.
+- Each row shows: name, time window, the **shared spending in that period**
+  (who-owes-whom for the group's accruals), and the **running who-owes-whom balance
+  AFTER that period** — the net over the *whole* timeline (accruals + settle-ups) as
+  of the group's last transaction.
+- The reader **follows the balance down the rows** to today's total. The **last
+  group's running balance equals the headline net**, so the view reconciles by
+  construction — no hidden "open tail" or residual.
+- Settled rows are greyed (the balance had returned to / crossed zero after them);
+  open and partial rows are prominent. The bottom line restates **Net owed today**,
+  which matches the budget-card figure.
 
 ## 6. Build order
 
