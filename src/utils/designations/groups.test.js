@@ -55,6 +55,22 @@ describe('buildGroups', () => {
     const groups = buildGroups([a({ date: '2025-09-01' }), a({ date: '2025-01-01' })]);
     expect(groups[0].startDate <= groups[1].startDate).toBe(true);
   });
+
+  it('runningBalance is the full-timeline net as of each group end; last group == overall net', () => {
+    const txns = [
+      a({ date: '2025-01-15', contribution: 100000, tripName: null }),                                  // Q1 +100000
+      { date: '2025-01-20', hasTransferTag: true, contribution: -60000, settled: true },                // settle-up -60000 (clearing, no group)
+      a({ date: '2025-04-15', contribution: 80000, tripName: null }),                                   // Q2 +80000
+    ];
+    const groups = buildGroups(txns);
+    const q1 = groups.find(g => g.key === 'quarter:2025-Q1');
+    const q2 = groups.find(g => g.key === 'quarter:2025-Q2');
+    expect(q1.runningBalance).toBe(100000);  // as of Q1 end (01-15); the 01-20 clearing is later
+    expect(q2.runningBalance).toBe(120000);  // as of Q2 end: +100000 - 60000 (clearing) + 80000
+    // the last group's runningBalance equals the overall net (timeline reconciles by construction)
+    const overallNet = txns.reduce((s, t) => s + t.contribution, 0);
+    expect(groups[groups.length - 1].runningBalance).toBe(overallNet);
+  });
 });
 
 describe('summarizeGroups', () => {

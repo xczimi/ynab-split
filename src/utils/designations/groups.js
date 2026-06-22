@@ -33,13 +33,29 @@ export function groupKeyFor(transaction) {
 
 /**
  * Partition settled-marked accruals into groups (trips + non-trip quarters) and
- * aggregate each to net + settled/partial/open status. Clearings are excluded —
- * they belong to no group (see §9). Input must already be markSettled().
+ * aggregate each to net + settled/partial/open status. Clearings are excluded from
+ * the groups themselves (they belong to no group; see §9) but DO count toward each
+ * group's `runningBalance` — the who-owes-whom net over the WHOLE timeline (accruals
+ * and settle-ups) as of the group's last transaction. The final group's
+ * `runningBalance` therefore equals the headline net: the timeline reconciles by
+ * construction. Input must already be markSettled().
  * @param {Array} markedTransactions
- * @returns {Array<{key,kind,label,transactions,net,count,settledCount,status,startDate,endDate}>} oldest-first
+ * @returns {Array<{key,kind,label,transactions,net,count,settledCount,status,startDate,endDate,runningBalance}>} oldest-first
  */
 export function buildGroups(markedTransactions = []) {
   const accruals = markedTransactions.filter(t => !isClearing(t));
+
+  // Running who-owes-whom balance over the full timeline (incl. settle-ups), by date.
+  const timeline = [...markedTransactions].sort((x, y) => x.date.localeCompare(y.date));
+  const contributionOf = t => t.contribution ?? transactionContribution(t);
+  const balanceAsOf = (date) => {
+    let balance = 0;
+    for (const t of timeline) {
+      if (t.date > date) break;
+      balance += contributionOf(t);
+    }
+    return balance;
+  };
 
   const byKey = new Map();
   for (const t of accruals) {
@@ -50,17 +66,19 @@ export function buildGroups(markedTransactions = []) {
 
   const groups = [...byKey.entries()].map(([key, txns]) => {
     const sorted = [...txns].sort((x, y) => x.date.localeCompare(y.date));
-    const net = sorted.reduce((sum, t) => sum + (t.contribution ?? transactionContribution(t)), 0);
+    const net = sorted.reduce((sum, t) => sum + contributionOf(t), 0);
     const settledCount = sorted.filter(t => t.settled).length;
     const count = sorted.length;
     const status = settledCount === count ? 'settled' : settledCount === 0 ? 'open' : 'partial';
     const kind = key.startsWith('trip:') ? 'trip' : 'quarter';
     const label = kind === 'trip' ? key.slice('trip:'.length) : key.slice('quarter:'.length);
+    const endDate = sorted[sorted.length - 1].date;
     return {
       key, kind, label, transactions: sorted,
       net, count, settledCount, status,
       startDate: sorted[0].date,
-      endDate: sorted[sorted.length - 1].date,
+      endDate,
+      runningBalance: balanceAsOf(endDate),
     };
   });
 
