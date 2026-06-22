@@ -158,11 +158,18 @@ grouped model:
   expense can no longer be mistaken for its reimbursement. Critically, the false tag
   had been **overriding the user's per-category owner** (Strata Fee = 100% one
   partner), silently dropping the expense from the split — now respected.
+- **Follow-up — group ↔ transaction transparency (deferred to a new session).**
+  The timeline shows per-group running balances, but there is **no drill-down**: you
+  cannot expand a trip/quarter to see its transactions, nor trace a single
+  transaction to the group it landed in. Next session: make the group ↔ transaction
+  mapping navigable in the UI (expandable group rows listing their transactions, and
+  a way to see why each transaction is settled/open). The math is trusted; this is
+  purely about legibility.
 - **Follow-up (deferred):** a non-blocking **"mark your side of transfers"
   warning** — detect a likely one-sided transfer leg (single-sided amount with no
   cross-budget match, or a known settle-up payee) and nudge the user to tag it
-  `#transfer`. Out of scope for this branch (it touches transfer detection, which
-  §7 walls off); captured here so it is not lost.
+  `#transfer`. (The opposite-sign matcher above fixed the strata collision; this
+  remains for genuinely one-sided legs.)
 
 ## 9. Settlement model — forward ledger, strict zero-crossing
 
