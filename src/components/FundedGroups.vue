@@ -29,15 +29,13 @@
           </div>
         </div>
 
-        <!-- Reconciliation: open tail + residual = net -->
-        <div v-if="openGroups.length" class="d-flex justify-content-between small text-muted mt-3">
-          <span>Open &amp; partial total</span><span>{{ formatCurrency(openTailTotal) }}</span>
+        <div v-if="!openGroups.length" class="text-muted small py-2">
+          All groups settled — you're square.
         </div>
-        <div v-if="openGroups.length" class="d-flex justify-content-between small text-muted">
-          <span>Earlier settle-up residual</span><span>{{ formatCurrency(residual) }}</span>
-        </div>
-        <div class="d-flex justify-content-between fw-bold border-top pt-2 mt-1">
-          <span>Net owed</span><span>{{ formatCurrency(net) }}</span>
+
+        <!-- Authoritative bottom line (matches the budget-card Owes/Owed) -->
+        <div class="d-flex justify-content-between fw-bold border-top pt-2 mt-3">
+          <span>Net owed</span><span>{{ owedLabel(net) }}</span>
         </div>
 
         <!-- Settled groups: collapsed / greyed -->
@@ -80,8 +78,6 @@ export default {
       return summarizeGroups(this.transactions, { leftName: this.leftName, rightName: this.rightName });
     },
     net() { return this.summary.net; },
-    openTailTotal() { return this.summary.openTailTotal; },
-    residual() { return this.summary.residual; },
     openGroups() {
       return this.summary.groups.filter(g => g.status !== 'settled');
     },

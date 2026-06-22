@@ -133,44 +133,64 @@ grouped model:
 
 ## 8. Accepted risks & things to validate
 
-- **Oldest-first assumes generic settle-ups.** If a payment is made out of order
-  or earmarked for one specific trip, it still clears the oldest open balance.
-  Accepted fuzziness, consistent with the "auto, don't overthink it" choice.
-- **Bidirectional netting needs care.** Accruals push the balance both ways, so
-  "cumulative accrued position" is not strictly monotonic. ✅ **Resolved by the
-  Phase-0 spike — see §9.**
+- **Settle-ups clear by date, not by earmark.** A payment clears whatever debt
+  stood when it happened, regardless of which trip it was "meant for." Accepted
+  fuzziness, consistent with the "auto, don't overthink it" choice.
+- **Bidirectional / oscillating balance.** The balance crosses zero and goes
+  negative repeatedly; "cumulative accrued position" is not monotonic. ✅ **Resolved
+  by the forward-ledger model in §9** (the original oldest-first pool rule was
+  disproved by real data and replaced).
+- **`#transfer` false-positive (real, deferred).** A recurring household bill whose
+  amount matches a recurring settle-up within 3 days gets mis-tagged `#transfer`
+  (observed: a monthly $555.97 strata vs a monthly $555.97 e-transfer). This is
+  transfer-detection accuracy, folded into the deferred warning below.
 - **Follow-up (deferred):** a non-blocking **"mark your side of transfers"
   warning** — detect a likely one-sided transfer leg (single-sided amount with no
   cross-budget match, or a known settle-up payee) and nudge the user to tag it
   `#transfer`. Out of scope for this branch (it touches transfer detection, which
   §7 walls off); captured here so it is not lost.
 
-## 9. Phase-0 spike resolution (settlement watermark)
+## 9. Settlement model — forward ledger, strict zero-crossing
 
-The build's first act was a spike computing the oldest-first watermark over the
-161-transaction fixture. It surfaced a genuine fork (the §8 bidirectional risk),
-resolved by interview. Decisions, now locked:
+> **History.** The Phase-0 spike first tried an *oldest-first clearing-pool*
+> watermark. Real two-budget data (200 txns) disproved its core premise: the
+> balance is **not** persistently one-sided — it crosses zero and goes negative
+> repeatedly. The pool rule mis-allocated recent settle-ups onto old debt and
+> wrongly marked a year of groups "open." The model below replaces it. The
+> separate "open tail + residual" reconciliation line is also dropped.
 
-1. **Authoritative net.** `computeSettlement().net` (the exact net over *all*
-   transactions, accruals + clearings) is the single source of truth and what the
-   budget card shows. On the fixture this is **+$286.15** (right owes left).
-2. **Reconciliation by residual line, literal §3.** `settled` stays a
-   **per-transaction, oldest-first** flag; a **group is settled iff every
-   transaction in it is settled**. The open tail is the set of unsettled
-   transactions; on the fixture its total (~$503) does **not** equal the net, so
-   the grouped view shows an explicit **residual line** (~−$217) that closes the
-   open-tail total to the exact `computeSettlement().net`. The gap is made
-   visible, not hidden.
-3. **Exact rule (A1).** Sort accruals oldest → newest by their **signed
-   contribution** (`transactionContribution`); maintain a running cumulative
-   accrued total; a transaction is `settled` once cumulative-accrued (including
-   itself) ≤ the **clearing pool** = −Σ(clearing contributions). Direction-aware
-   (works whichever way the net points). Because accruals are bidirectional the
-   flag can be non-contiguous (a late negative accrual can dip the running total
-   back under the pool — 2 such cases in the fixture); **accepted**, consistent
-   with §8 "accepted fuzziness." Clearings (`#transfer`, transfer-exempt) form the
-   pool, belong to **no group**, and are treated as always-settled.
-4. **Untagged transactions are just transactions.** A row not recognized as a
-   transfer is a normal accrual regardless of inflow/outflow sign (e.g. an
-   empty-memo `"Carey"` inflow is income/refund-like, contributing negatively). No
-   retag, no special-casing — honors §7. Any cleanup is the deferred warning above.
+The settled flag is a **forward running ledger from day 0** (`markSettled`):
+
+1. **Authoritative net.** `computeSettlement().net` — the exact net over *all*
+   transactions (accruals + clearings) — is the single source of truth and the
+   budget-card headline. The grouped view shows this and nothing that needs to
+   "reconcile" to it; the open/partial groups simply *are* what is still owed.
+2. **The rule (strict).** Walk every transaction oldest → newest, keeping the
+   running net balance. The books close at the **last point where that balance
+   reached zero or passed into the other person's favour**
+   (`sign(net) * balance <= 0`): every transaction up to and including that *last
+   square* point is `settled`; the run of transactions since is the open tail that
+   makes up the current balance. A group is settled iff all its transactions are;
+   the group straddling the last crossing shows partial ("7 of 9 settled").
+3. **Strict, not partial-credit.** A group settles only once the standing debt was
+   genuinely cleared (the balance reached/crossed zero), **not** merely paid down
+   part-way. Returning to zero is required; a balance that only dips without
+   crossing leaves its groups open. (Considered and rejected: a lenient
+   "paid-back-below-its-level" variant — too forgiving.)
+4. **Forward = backward (validation).** Walking *backward* from today's balance,
+   peeling the newest transactions until the running total returns to ≤ 0, yields
+   the identical open set. The forward ledger is the real computation; the backward
+   walk is the cross-check. Both are asserted in the tests.
+5. **Respects timing.** A settle-up only ever clears debt that actually stood when
+   it happened — it cannot reach back and re-settle a much older balance. Correct
+   whichever way the balance points and however many times it oscillates.
+6. **Untagged transactions are just transactions.** A row not recognized as a
+   transfer is a normal accrual regardless of inflow/outflow sign. No retag, no
+   special-casing — honors §7. (A real **`#transfer` false-positive** exists in the
+   wild — a recurring strata bill whose amount collides with a recurring settle-up
+   gets mis-tagged; that is transfer-detection accuracy, the §8 deferred follow-up.)
+
+On the 161-txn fixture this marks **3 groups settled** (the balance crossed zero
+only once, in Dec 2024); on the real 200-txn data it marks **all of 2024–2025
+settled** with only the recent 2026 quarters open — matching the owner's lived
+recollection of being square late in the year.

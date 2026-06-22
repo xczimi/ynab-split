@@ -68,11 +68,13 @@ export function buildGroups(markedTransactions = []) {
 }
 
 /**
- * Full grouped-view summary: marks settlement, partitions into groups, and returns
- * the reconciliation numbers. openTailTotal + residual === net (the residual line).
+ * Full grouped-view summary: marks settlement (strict forward zero-crossing, see
+ * settlement.markSettled), partitions accruals into groups, and returns the
+ * authoritative net. The open/partial groups ARE what is still owed; there is no
+ * separate "open tail" total — the headline `net` is the single source of truth.
  * @param {Array} transactions  raw (un-marked) designated transactions
  * @param {{leftName?:string, rightName?:string}} options
- * @returns {{groups:Array, net:number, clearingPool:number, openTailTotal:number, residual:number}}
+ * @returns {{groups:Array, net:number, clearingPool:number}}
  */
 export function summarizeGroups(transactions = [], options = {}) {
   const w = settlementWatermark(transactions, options);
@@ -80,7 +82,5 @@ export function summarizeGroups(transactions = [], options = {}) {
     groups: buildGroups(w.transactions),
     net: w.net,
     clearingPool: w.clearingPool,
-    openTailTotal: w.openTailTotal,
-    residual: w.residual,
   };
 }

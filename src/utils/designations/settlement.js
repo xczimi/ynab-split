@@ -57,41 +57,50 @@ export function clearingPool(transactions = []) {
 }
 
 /**
- * Mark each transaction with a per-transaction `settled` flag via cumulative,
- * oldest-first clearing on the flat timeline (the §9 "A1" rule).
+ * Mark each transaction with a per-transaction `settled` flag via a forward
+ * running ledger from day 0 (see docs/funded-groups.md §9).
  *
- * - Accruals are walked oldest→newest by date; a running cumulative accrued total
- *   is kept. An accrual is `settled` once that running total, measured in the net's
- *   direction, has been covered by the clearing pool.
- * - Clearings are always `settled` (they ARE the payment) and belong to no group.
- * - Direction-aware (works whichever way the net points). Zero net → all settled.
+ * Walk every transaction (accruals AND clearings) oldest→newest, keeping the
+ * running net balance. The books close at the LAST point where that balance actually
+ * reached zero — or passed into the other person's favour (`sign(net) * balance <= 0`):
+ * everything up to and including that "last square" point is **settled**, and the run
+ * of transactions since is the open tail that makes up the current balance.
+ *
+ * Strict by design: a group is settled only once the standing debt was genuinely
+ * cleared (the balance reached/crossed zero), not merely paid down part-way. It
+ * respects timing — a settle-up only ever clears debt that actually stood when it
+ * happened — so it is correct whichever way the balance points and however many times
+ * it oscillates. (Dual check: walking BACKWARD from today's balance until the running
+ * total returns to zero lands on the same boundary — see the settlement tests.)
  *
  * @param {Array} transactions  each requires .date, .source, .amount, .ownerSide, .hasTransferTag
  * @param {{leftName?:string, rightName?:string}} options
  * @returns {Array} new array (input order) of {...t, contribution, settled}
  */
 export function markSettled(transactions = [], options = {}) {
-  const net = computeSettlement(transactions, options).net;
-  const pool = clearingPool(transactions);
-  const sign = Math.sign(net);
-
-  const chronological = transactions
+  const sorted = transactions
     .map((t, index) => ({ t, index }))
     .sort((a, b) => a.t.date.localeCompare(b.t.date) || a.index - b.index);
+  const n = sorted.length;
+
+  // Running balance after each transaction.
+  const balances = new Array(n);
+  let running = 0;
+  for (let p = 0; p < n; p++) {
+    running += transactionContribution(sorted[p].t);
+    balances[p] = running;
+  }
+  const sign = Math.sign(running);
+
+  // Last position where the balance was square or in the other person's favour.
+  let lastSquarePos = -1;
+  for (let p = 0; p < n; p++) {
+    if (sign === 0 || sign * balances[p] <= 0) lastSquarePos = p;
+  }
 
   const settledByIndex = new Array(transactions.length);
-  let running = 0;
-  for (const { t, index } of chronological) {
-    if (isClearing(t)) {
-      settledByIndex[index] = true;
-      continue;
-    }
-    running += transactionContribution(t);
-    // Compare magnitudes: an accrual is settled once the cumulative accrued amount has
-    // been covered by the clearing pool. Using |running| <= |pool| (rather than signing
-    // both sides by sign(net)) also handles the over-cleared case, where net flips sign
-    // relative to the accruals because the settle-up over-pays.
-    settledByIndex[index] = sign === 0 ? true : Math.abs(running) <= Math.abs(pool);
+  for (let p = 0; p < n; p++) {
+    settledByIndex[sorted[p].index] = p <= lastSquarePos;
   }
 
   return transactions.map((t, index) => ({
@@ -102,25 +111,19 @@ export function markSettled(transactions = [], options = {}) {
 }
 
 /**
- * Full settlement watermark summary for the grouped view.
+ * Full settlement watermark summary for the grouped view: the per-transaction
+ * `settled` flags plus the authoritative net and the total amount settled so far.
  * @param {Array} transactions
  * @param {{leftName?:string, rightName?:string}} options
- * @returns {{transactions:Array, net:number, clearingPool:number, openTailTotal:number, residual:number}}
- *   openTailTotal = Σ contribution over UNSETTLED accruals (the visible open tail).
- *   residual = net - openTailTotal (the explicit reconciliation line; see §9).
+ * @returns {{transactions:Array, net:number, clearingPool:number}}
+ *   net = computeSettlement().net (the authoritative "who owes whom" headline).
+ *   clearingPool = total settle-ups, in the net's direction (informational).
  */
 export function settlementWatermark(transactions = [], options = {}) {
-  const marked = markSettled(transactions, options);
-  const net = computeSettlement(transactions, options).net;
-  const openTailTotal = marked
-    .filter(t => !isClearing(t) && !t.settled)
-    .reduce((sum, t) => sum + t.contribution, 0);
   return {
-    transactions: marked,
-    net,
+    transactions: markSettled(transactions, options),
+    net: computeSettlement(transactions, options).net,
     clearingPool: clearingPool(transactions),
-    openTailTotal,
-    residual: net - openTailTotal,
   };
 }
 

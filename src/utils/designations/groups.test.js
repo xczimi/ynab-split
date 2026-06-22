@@ -58,13 +58,14 @@ describe('buildGroups', () => {
 });
 
 describe('summarizeGroups', () => {
-  it('returns groups plus reconciliation numbers', () => {
+  it('returns groups plus the authoritative net (no residual fields)', () => {
     const accr = (date) => ({ date, source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false, tripName: null });
     const clearing = { date: '2024-01-15', source: 'right', amount: -300000, ownerSide: 'shared', hasTransferTag: true };
     const s = summarizeGroups([accr('2024-01-01'), accr('2024-02-01'), accr('2024-03-01'), clearing]);
-    expect(s.net).toBe(150000);
-    expect(s.openTailTotal + s.residual).toBe(s.net);
-    expect(Array.isArray(s.groups)).toBe(true);
+    expect(s.net).toBe(150000);                 // +100000 - 150000 + 100000 + 100000
+    expect(s.openTailTotal).toBeUndefined();     // dropped — net is the single source of truth
+    expect(s.residual).toBeUndefined();
+    expect(s.groups.length).toBeGreaterThan(0);
     expect(s.groups.every(g => g.kind === 'quarter')).toBe(true); // none trip-tagged
   });
 });

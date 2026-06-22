@@ -87,73 +87,116 @@ describe('clearingPool', () => {
   it('empty -> 0', () => expect(clearingPool([])).toBe(0));
 });
 
-describe('markSettled (oldest-first A1 rule)', () => {
-  // Three +100000 accruals oldest->newest, one clearing paying down 150000.
-  // pool = 150000, net = 300000 - 150000 = 150000.
-  const accr = (date) => ({ date, source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false });
-  const clearing = { date: '2024-01-15', source: 'right', amount: -300000, ownerSide: 'shared', hasTransferTag: true };
+describe('markSettled (strict forward zero-crossing)', () => {
+  // contribution: source left, amount -200000, shared => +100000 (right owes left)
+  const up = (date) => ({ date, source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false });
+  // a settle-up bringing the balance down: source right, transfer-tagged
+  const pay = (date, amount) => ({ date, source: 'right', amount, ownerSide: 'shared', hasTransferTag: true });
 
-  it('settles oldest accruals up to the clearing pool, leaves the rest open', () => {
-    const txns = [accr('2024-01-01'), accr('2024-02-01'), accr('2024-03-01'), clearing];
-    const marked = markSettled(txns);
-    const byDate = Object.fromEntries(marked.filter(t => !t.hasTransferTag).map(t => [t.date, t.settled]));
-    expect(byDate['2024-01-01']).toBe(true);   // cumulative 100000 <= 150000
-    expect(byDate['2024-02-01']).toBe(false);  // cumulative 200000 > 150000
-    expect(byDate['2024-03-01']).toBe(false);  // cumulative 300000 > 150000
+  it('settles up to the last point the balance returned to zero; the run since is open', () => {
+    const txns = [
+      up('2024-01-01'),                                                                                  // bal +100000
+      pay('2024-01-15', -200000),                                                                        // -100000 -> bal 0 (square)
+      { date: '2024-02-01', source: 'left', amount: -100000, ownerSide: 'shared', hasTransferTag: false }, // +50000 -> bal +50000
+    ];
+    const m = Object.fromEntries(markSettled(txns).map(t => [t.date, t.settled]));
+    expect(m['2024-01-01']).toBe(true);   // the balance reached 0 after it
+    expect(m['2024-01-15']).toBe(true);   // the settle-up that squared it
+    expect(m['2024-02-01']).toBe(false);  // accrued after the last square -> open
   });
 
-  it('clearings are always settled', () => {
-    const marked = markSettled([clearing]);
-    expect(marked[0].settled).toBe(true);
+  it('nothing is settled when the balance never returns to zero', () => {
+    const txns = [up('2024-01-01'), up('2024-02-01')]; // bal +100000, +200000 — never square
+    expect(markSettled(txns).every(t => !t.settled)).toBe(true);
+  });
+
+  it('passing BELOW zero (over-paid) still settles everything before the crossing', () => {
+    const txns = [
+      up('2024-01-01'),                                                                                  // +100000
+      pay('2024-01-15', -500000),                                                                        // -250000 -> bal -150000 (over-paid)
+      { date: '2024-02-01', source: 'left', amount: -400000, ownerSide: 'shared', hasTransferTag: false }, // +200000 -> bal +50000
+    ];
+    const m = Object.fromEntries(markSettled(txns).map(t => [t.date, t.settled]));
+    expect(m['2024-01-01']).toBe(true);
+    expect(m['2024-01-15']).toBe(true);
+    expect(m['2024-02-01']).toBe(false);
+  });
+
+  it('settles through the LAST zero-crossing when the balance oscillates', () => {
+    const txns = [
+      up('2024-01-01'),             // bal +100000
+      pay('2024-01-10', -200000),   // bal 0   (cross #1)
+      up('2024-02-01'),             // bal +100000
+      pay('2024-02-10', -200000),   // bal 0   (cross #2 — the last square)
+      up('2024-03-01'),             // bal +100000 (net)
+    ];
+    const m = Object.fromEntries(markSettled(txns).map(t => [t.date, t.settled]));
+    expect(m['2024-01-01']).toBe(true);   // before the last square
+    expect(m['2024-02-10']).toBe(true);   // the last square
+    expect(m['2024-03-01']).toBe(false);  // open since
+  });
+
+  it('direction-aware: mirrors when the net is negative (left owes right)', () => {
+    const down = (date) => ({ date, source: 'right', amount: -200000, ownerSide: 'shared', hasTransferTag: false }); // -100000
+    const txns = [
+      down('2024-01-01'),                                                                                // -100000
+      { date: '2024-01-15', source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: true }, // +100000 -> bal 0
+      down('2024-02-01'),                                                                                // -100000 (net -100000)
+    ];
+    const m = Object.fromEntries(markSettled(txns).map(t => [t.date, t.settled]));
+    expect(m['2024-01-01']).toBe(true);
+    expect(m['2024-02-01']).toBe(false);
+  });
+
+  it('empty -> empty; zero net -> all settled', () => {
+    expect(markSettled([])).toEqual([]);
+    const offsetting = [
+      { date: '2024-01-01', source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false },  // +100000
+      { date: '2024-02-01', source: 'right', amount: -200000, ownerSide: 'shared', hasTransferTag: false }, // -100000 -> bal 0
+    ];
+    expect(markSettled(offsetting).every(t => t.settled)).toBe(true);
   });
 
   it('preserves input order and adds contribution', () => {
-    const txns = [accr('2024-03-01'), accr('2024-01-01')];
+    const txns = [up('2024-03-01'), up('2024-01-01')];
     const marked = markSettled(txns);
     expect(marked.map(t => t.date)).toEqual(['2024-03-01', '2024-01-01']);
     expect(marked[0].contribution).toBe(100000);
   });
 
-  it('direction-aware: mirrors for a negative net', () => {
-    // left owes right: accruals negative, a clearing paying up.
-    const nAccr = (date) => ({ date, source: 'right', amount: -200000, ownerSide: 'shared', hasTransferTag: false }); // contribution -100000
-    const up = { date: '2024-01-15', source: 'left', amount: -300000, ownerSide: 'shared', hasTransferTag: true }; // contribution +150000
-    const txns = [nAccr('2024-01-01'), nAccr('2024-02-01'), nAccr('2024-03-01'), up];
-    const byDate = Object.fromEntries(markSettled(txns).filter(t => !t.hasTransferTag).map(t => [t.date, t.settled]));
-    expect(byDate['2024-01-01']).toBe(true);
-    expect(byDate['2024-02-01']).toBe(false);
-  });
+  it('forward result equals the independent backward validation walk', () => {
+    // The real engine works forward from day 0; walking BACKWARD from today's balance
+    // (peeling newest transactions until the running total returns to <= 0) must land on
+    // the identical open set.
+    const txns = [up('2024-01-01'), pay('2024-01-15', -200000), up('2024-02-01'), up('2024-03-01')];
+    const fwdOpen = new Set(markSettled(txns).map((m, i) => (m.settled ? null : txns[i])).filter(Boolean));
 
-  it('empty -> empty, zero net -> all settled', () => {
-    expect(markSettled([])).toEqual([]);
-    const offsetting = [
-      { date: '2024-01-01', source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false },
-      { date: '2024-02-01', source: 'right', amount: -200000, ownerSide: 'shared', hasTransferTag: false },
-    ];
-    expect(markSettled(offsetting).every(t => t.settled)).toBe(true);
-  });
-
-  it('over-cleared: all accruals settled when the pool exceeds accruals and net flips sign', () => {
-    const a1 = { date: '2024-01-01', source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false };
-    const a2 = { date: '2024-02-01', source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false };
-    const clearing = { date: '2024-03-01', source: 'right', amount: -500000, ownerSide: 'shared', hasTransferTag: true };
-    // Σaccruals = +200000 ; pool = 250000 ; net = -50000 (sign flips, but all covered)
-    const marked = markSettled([a1, a2, clearing]);
-    expect(marked.filter(t => !t.hasTransferTag).every(t => t.settled)).toBe(true);
+    const sorted = [...txns].sort((a, b) => a.date.localeCompare(b.date));
+    const c = sorted.map(transactionContribution);
+    const B = [0];
+    for (let i = 0; i < c.length; i++) B.push(B[i] + c[i]);
+    const s = Math.sign(B[B.length - 1]) || 1;
+    const bwdOpen = new Set();
+    for (let p = sorted.length; p >= 1; p--) {
+      if (s * B[p] <= 0) break;
+      bwdOpen.add(sorted[p - 1]);
+    }
+    expect(fwdOpen.size).toBe(bwdOpen.size);
+    expect([...fwdOpen].every(t => bwdOpen.has(t))).toBe(true);
   });
 });
 
 describe('settlementWatermark', () => {
-  const accr = (date) => ({ date, source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false });
-  const clearing = { date: '2024-01-15', source: 'right', amount: -300000, ownerSide: 'shared', hasTransferTag: true };
+  const up = (date) => ({ date, source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false });
+  const pay = (date, amount) => ({ date, source: 'right', amount, ownerSide: 'shared', hasTransferTag: true });
 
-  it('residual closes open tail to the exact net', () => {
-    const txns = [accr('2024-01-01'), accr('2024-02-01'), accr('2024-03-01'), clearing];
+  it('returns the marked transactions, the authoritative net, and the total settled', () => {
+    const txns = [up('2024-01-01'), pay('2024-01-15', -200000), up('2024-02-01')];
     const w = settlementWatermark(txns);
-    expect(w.net).toBe(150000);
-    expect(w.clearingPool).toBe(150000);
-    expect(w.openTailTotal).toBe(200000);            // two unsettled +100000 accruals
-    expect(w.residual).toBe(-50000);                 // concrete: net(150000) - openTail(200000)
-    expect(w.openTailTotal + w.residual).toBe(w.net); // invariant: residual closes the open tail to net
+    expect(w.net).toBe(computeSettlement(txns).net); // authoritative headline
+    expect(w.net).toBe(100000);                      // +100000 - 100000 + 100000
+    expect(w.clearingPool).toBe(100000);             // one 100000 settle-up
+    expect(w.transactions).toHaveLength(3);
+    expect(w.transactions.every(t => 'settled' in t)).toBe(true);
   });
 });
