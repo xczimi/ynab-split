@@ -176,6 +176,22 @@ describe('tripIdentification utilities', () => {
       const result = isTransferTransaction(transaction, allTransactions);
       expect(result).toBe(false);
     });
+
+    it('should not identify transfer when both legs are SAME-sign outflows (strata vs reimbursement)', () => {
+      // Real case: you pay Carey a $555.97 reimbursement (outflow on your budget) the
+      // same week Carey pays the $555.97 strata bill (outflow on her budget). Same
+      // amount, opposite budgets, within 3 days — but BOTH outflows, so it is NOT the
+      // transfer pair. The transfer is your outflow ↔ Carey's matching INFLOW.
+      const yourReimbursement = { id: '1', date: '2024-02-01', amount: -555970, source: 'left' };
+      const careyStrata       = { id: '2', date: '2024-02-02', amount: -555970, source: 'right' }; // her outflow
+      const careyInflow       = { id: '3', date: '2024-02-01', amount: 555970, source: 'right' };  // the real other leg
+
+      const all = [yourReimbursement, careyStrata, careyInflow];
+      // Your reimbursement is a transfer (pairs with Carey's inflow)...
+      expect(isTransferTransaction(yourReimbursement, all)).toBe(true);
+      // ...but the strata bill (same-sign outflow) is NOT a transfer.
+      expect(isTransferTransaction(careyStrata, all)).toBe(false);
+    });
   });
 
   describe('addAutomaticTags', () => {
