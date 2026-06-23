@@ -128,6 +128,17 @@
 
           <!-- Joint Spending Tab -->
           <div v-if="activeTab === 'joint' && leftBudgetId && rightBudgetId">
+            <!-- Funded Groups -->
+            <div class="row mb-4">
+              <div class="col-12">
+                <FundedGroups
+                  :transactions="transactionsWithDesignations"
+                  :leftName="personDisplayNames.left"
+                  :rightName="personDisplayNames.right"
+                />
+              </div>
+            </div>
+
             <!-- Household Category Settings -->
             <div class="row mb-4">
               <div class="col-12">
@@ -264,6 +275,7 @@ import TripSummary from './components/TripSummary.vue';
 import TransferSummary from './components/TransferSummary.vue';
 import BalanceTimeline from './components/BalanceTimeline.vue';
 import CategorySettings from './components/CategorySettings.vue';
+import FundedGroups from './components/FundedGroups.vue';
 
 export default {
   // The data to feed our templates
@@ -736,7 +748,8 @@ export default {
     TripSummary,
     TransferSummary,
     BalanceTimeline,
-    CategorySettings
+    CategorySettings,
+    FundedGroups
   },
 }
 </script>

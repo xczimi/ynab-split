@@ -37,6 +37,14 @@ export function findMatches(transaction, allTransactions, config = defaultConfig
       return false;
     }
 
+    // A real settle-up moves money OUT of one budget and INTO the other, so its two
+    // legs have OPPOSITE signs (one outflow, one inflow). Requiring opposite signs
+    // stops a same-amount shared expense — e.g. a strata bill one partner pays — from
+    // being mistaken for the transfer that reimburses it.
+    if (Math.sign(other.amount) === Math.sign(transaction.amount)) {
+      return false;
+    }
+
     // Must be within configured days
     const daysDiff = getDaysDifference(transaction.date, other.date, config.timezone);
     return daysDiff <= maxDays;

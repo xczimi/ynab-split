@@ -1,0 +1,87 @@
+import { quarterKey, groupKeyFor, buildGroups, summarizeGroups } from './groups.js';
+
+describe('quarterKey (America/Vancouver)', () => {
+  it('maps months to quarters', () => {
+    expect(quarterKey('2025-01-15')).toBe('2025-Q1');
+    expect(quarterKey('2025-04-07')).toBe('2025-Q2');
+    expect(quarterKey('2025-07-03')).toBe('2025-Q3');
+    expect(quarterKey('2025-12-01')).toBe('2025-Q4');
+  });
+});
+
+describe('groupKeyFor', () => {
+  it('trip-tagged -> trip group', () => {
+    expect(groupKeyFor({ date: '2025-05-09', tripName: 'trip2025May9' })).toBe('trip:trip2025May9');
+  });
+  it('untagged -> calendar quarter', () => {
+    expect(groupKeyFor({ date: '2025-07-03', tripName: null })).toBe('quarter:2025-Q3');
+  });
+});
+
+const a = (over) => ({ source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false, contribution: 100000, settled: true, tripName: null, ...over });
+
+describe('buildGroups', () => {
+  it('partitions into trips + quarters, excludes clearings', () => {
+    const txns = [
+      a({ date: '2025-05-09', tripName: 'trip2025May9' }),
+      a({ date: '2025-05-10', tripName: 'trip2025May9' }),
+      a({ date: '2025-07-03' }),                              // quarter 2025-Q3
+      { date: '2025-07-04', hasTransferTag: true, contribution: -50000, settled: true }, // clearing -> excluded
+    ];
+    const groups = buildGroups(txns);
+    expect(groups.map(g => g.key)).toEqual(['trip:trip2025May9', 'quarter:2025-Q3']);
+    expect(groups[0].kind).toBe('trip');
+    expect(groups[0].count).toBe(2);
+    expect(groups[1].kind).toBe('quarter');
+  });
+
+  it('net sums contributions; status reflects settled counts', () => {
+    const txns = [
+      a({ date: '2025-07-01', contribution: 100000, settled: true }),
+      a({ date: '2025-07-02', contribution: 50000, settled: false }),
+    ];
+    const [q] = buildGroups(txns);
+    expect(q.net).toBe(150000);
+    expect(q.settledCount).toBe(1);
+    expect(q.status).toBe('partial');
+  });
+
+  it('all settled -> settled; none settled -> open', () => {
+    expect(buildGroups([a({ date: '2025-07-01', settled: true })])[0].status).toBe('settled');
+    expect(buildGroups([a({ date: '2025-07-01', settled: false })])[0].status).toBe('open');
+  });
+
+  it('sorts groups oldest-first by startDate', () => {
+    const groups = buildGroups([a({ date: '2025-09-01' }), a({ date: '2025-01-01' })]);
+    expect(groups[0].startDate <= groups[1].startDate).toBe(true);
+  });
+
+  it('runningBalance is the full-timeline net as of each group end; last group == overall net', () => {
+    const txns = [
+      a({ date: '2025-01-15', contribution: 100000, tripName: null }),                                  // Q1 +100000
+      { date: '2025-01-20', hasTransferTag: true, contribution: -60000, settled: true },                // settle-up -60000 (clearing, no group)
+      a({ date: '2025-04-15', contribution: 80000, tripName: null }),                                   // Q2 +80000
+    ];
+    const groups = buildGroups(txns);
+    const q1 = groups.find(g => g.key === 'quarter:2025-Q1');
+    const q2 = groups.find(g => g.key === 'quarter:2025-Q2');
+    expect(q1.runningBalance).toBe(100000);  // as of Q1 end (01-15); the 01-20 clearing is later
+    expect(q2.runningBalance).toBe(120000);  // as of Q2 end: +100000 - 60000 (clearing) + 80000
+    // the last group's runningBalance equals the overall net (timeline reconciles by construction)
+    const overallNet = txns.reduce((s, t) => s + t.contribution, 0);
+    expect(groups[groups.length - 1].runningBalance).toBe(overallNet);
+  });
+});
+
+describe('summarizeGroups', () => {
+  it('returns groups plus the authoritative net (no residual fields)', () => {
+    const accr = (date) => ({ date, source: 'left', amount: -200000, ownerSide: 'shared', hasTransferTag: false, tripName: null });
+    const clearing = { date: '2024-01-15', source: 'right', amount: -300000, ownerSide: 'shared', hasTransferTag: true };
+    const s = summarizeGroups([accr('2024-01-01'), accr('2024-02-01'), accr('2024-03-01'), clearing]);
+    expect(s.net).toBe(150000);                 // +100000 - 150000 + 100000 + 100000
+    expect(s.openTailTotal).toBeUndefined();     // dropped — net is the single source of truth
+    expect(s.residual).toBeUndefined();
+    expect(s.groups.length).toBeGreaterThan(0);
+    expect(s.groups.every(g => g.kind === 'quarter')).toBe(true); // none trip-tagged
+  });
+});

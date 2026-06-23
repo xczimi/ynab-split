@@ -15,6 +15,9 @@ import {
   processTransactions,
   isTransferTransaction,
   computeSettlement,
+  markSettled,
+  settlementWatermark,
+  summarizeGroups,
 } from '../src/utils/designations/index.js';
 
 import {
@@ -331,5 +334,66 @@ describe('ownership end-to-end', () => {
     const legacy = shared.reduce((r, t) => r + (t.source === 'left' ? t.amount : -t.amount), 0) / 2;
     const { net } = computeSettlement(shared);
     expect(Math.abs(net)).toBe(Math.abs(legacy));
+  });
+});
+
+describe('settlement watermark over the real fixture', () => {
+  const processed = processTransactions(sampleTransactions, {
+    ownership: { personNames: { left: { name: 'Left' }, right: { name: 'Right' } }, categoryOwners: {} },
+  });
+
+  it('marks 51 of 145 accruals settled (strict forward zero-crossing)', () => {
+    const marked = markSettled(processed);
+    const accruals = marked.filter(t => !t.hasTransferTag);
+    expect(accruals.length).toBe(145);
+    expect(accruals.filter(t => t.settled).length).toBe(51);
+    expect(accruals.filter(t => !t.settled).length).toBe(94);
+  });
+
+  it('reports the authoritative net and total settled (no residual fields)', () => {
+    const w = settlementWatermark(processed);
+    expect(w.net).toBe(286155);
+    expect(w.net).toBe(computeSettlement(processed).net); // authoritative headline
+    expect(w.clearingPool).toBe(9067400);
+    expect(w.openTailTotal).toBeUndefined();
+    expect(w.residual).toBeUndefined();
+  });
+});
+
+describe('funded groups over the real fixture', () => {
+  const processed = processTransactions(sampleTransactions, {
+    ownership: { personNames: { left: { name: 'Left' }, right: { name: 'Right' } }, categoryOwners: {} },
+  });
+  const summary = summarizeGroups(processed);
+
+  it('produces 12 groups, 3 fully settled (balance only crossed zero once)', () => {
+    expect(summary.groups.length).toBe(12);
+    expect(summary.groups.filter(g => g.status === 'settled').length).toBe(3);
+  });
+
+  it('the settled groups are the earliest, up to the last time the balance was square', () => {
+    const settled = summary.groups.filter(g => g.status === 'settled').map(g => g.key).sort();
+    expect(settled).toEqual(['quarter:2024-Q2', 'quarter:2024-Q3', 'trip:trip2024Aug29-Sep3'].sort());
+  });
+
+  it('the group straddling the last zero-crossing is partial (2024-Q4: 7/9)', () => {
+    const g = summary.groups.find(x => x.key === 'quarter:2024-Q4');
+    expect(g.count).toBe(9);
+    expect(g.settledCount).toBe(7);
+    expect(g.status).toBe('partial');
+  });
+
+  it('a group entirely after the last square point is open (trip2025May9: 0/22)', () => {
+    const g = summary.groups.find(x => x.key === 'trip:trip2025May9');
+    expect(g.count).toBe(22);
+    expect(g.settledCount).toBe(0);
+    expect(g.status).toBe('open');
+  });
+
+  it('group nets sum to total accrued; the headline net is authoritative', () => {
+    // total accrued = net + clearingPool = 286155 + 9067400 (group nets are unaffected by settled status)
+    const totalAccrued = summary.groups.reduce((s, g) => s + g.net, 0);
+    expect(totalAccrued).toBe(9353555);
+    expect(summary.net).toBe(286155);
   });
 });
